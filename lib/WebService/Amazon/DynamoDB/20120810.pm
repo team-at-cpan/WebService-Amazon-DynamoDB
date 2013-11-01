@@ -4,9 +4,7 @@ use warnings;
 
 =head1 NAME
 
-Net::Async::DynamoDB::20120810 - interact with DynamoDB using API version 20120810
-
-=head1 SYNOPSIS
+WebService::Amazon::DynamoDB::20120810 - interact with DynamoDB using API version 20120810
 
 =head1 DESCRIPTION
 
@@ -18,10 +16,40 @@ use POSIX qw(strftime);
 use JSON::XS;
 use Scalar::Util qw(reftype);
 use B qw(svref_2object);
+use HTTP::Request;
 
 use WebService::Amazon::Signature;
 
 my $json = JSON::XS->new;
+
+=head2 new
+
+Instantiates the API object.
+
+Expects the following named parameters:
+
+=over 4
+
+=item * implementation - the object which provides a Future-returning C<request> method,
+see L<WebService::Amazon::DynamoDB::NaHTTP> for example.
+
+=item * host - the host (IP or hostname) to communicate with
+
+=item * port - the port to use for HTTP(S) requests
+
+=item * ssl - true for HTTPS, false for HTTP
+
+=item * algorithm - which signing algorithm to use, default AWS4-HMAC-SHA256
+
+=item * scope - the scope for requests, typically C<region/host/aws4_request>
+
+=item * access_key - the access key for signing requests
+
+=item * secret_key - the secret key for signing requests
+
+=back
+
+=cut
 
 sub new {
 	my $class = shift;
@@ -32,7 +60,7 @@ sub implementation { shift->{implementation} }
 sub host { shift->{host} }
 sub port { shift->{port} }
 sub algorithm { 'AWS4-HMAC-SHA256' }
-sub scope { '20110909/us-east-1/host/aws4_request' }
+sub scope { shift->{scope} }
 sub access_key { shift->{access_key} }
 sub secret_key { shift->{secret_key} }
 
@@ -40,6 +68,25 @@ sub secret_key { shift->{secret_key} }
 
 Creates a new table. It may take some time before the table is marked
 as active - use L</wait_for_table> to poll until the status changes.
+
+Named parameters:
+
+=over 4
+
+=item * table - the table name
+
+=item * read_capacity - expected read capacity units (optional, default 5)
+
+=item * write_capacity - expected write capacity units (optional, default 5)
+
+=item * fields - an arrayref specifying the fields, in pairs of (name, type),
+where type is N for numeric, S for string, SS for string sequence, B for binary
+etc.
+
+=item * primary - the primary keys as an arrayref of pairs indicating (name, type),
+default type is hash so ['pkey'] would create a single HASH primary key
+
+=back
 
 =cut
 
@@ -81,6 +128,16 @@ sub create_table {
 
 Describes the given table.
 
+Takes a single named parameter:
+
+=over 4
+
+=item * table - the table name
+
+=back
+
+and returns the table spec.
+
 =cut
 
 sub describe_table {
@@ -102,6 +159,14 @@ sub describe_table {
 =head2 delete_table
 
 Delete a table entirely.
+
+Takes a single named parameter:
+
+=over 4
+
+=item * table - the table name
+
+=back
 
 =cut
 
@@ -125,6 +190,14 @@ sub delete_table {
 
 Waits for the given table to be marked as active.
 
+Takes a single named parameter:
+
+=over 4
+
+=item * table - the table name
+
+=back
+
 =cut
 
 sub wait_for_table {
@@ -143,6 +216,8 @@ sub wait_for_table {
 =head2 each_table
 
 Run code for all current tables.
+
+Takes a coderef as the first parameter, will call this for each table found.
 
 =cut
 
@@ -178,6 +253,16 @@ sub each_table {
 
 Writes a single item to the table.
 
+Takes the following named parameters:
+
+=over 4
+
+=item * table - the table name
+
+=item * fields - the field spec, as a { key => value } hashref
+
+=back
+
 =cut
 
 sub put_item {
@@ -204,9 +289,103 @@ sub put_item {
 
 }
 
+=head2 update_item
+
+Updates a single item in the table.
+
+Takes the following named parameters:
+
+=over 4
+
+=item * table - the table name
+
+=item * item - the item to update, as a{ key => value } hashref
+
+=item * fields - the field spec, as a { key => value } hashref
+
+=back
+
+=cut
+
+sub update_item {
+	my $self = shift;
+	my %args = @_;
+
+	my %payload = (
+		TableName => $args{table},
+		ReturnConsumedCapacity => $args{capacity} ? 'TOTAL' : 'NONE',
+	);
+	foreach my $k (keys %{$args{item}}) {
+		my $v = $args{item}{$k};	
+		$payload{Key}{$k} = { type_for_value($v) => $v };
+	}
+	foreach my $k (keys %{$args{fields}}) {
+		my $v = $args{fields}{$k};	
+		$payload{AttributeUpdates}{$k} = {
+			Action => $args{action} || 'PUT',
+			Value => { type_for_value($v) => $v }
+		};
+	}
+
+	my $req = $self->make_request(
+		target => 'UpdateItem',
+		payload => \%payload,
+	);
+	$self->_request($req)->transform(
+		done => sub { $json->decode(shift) }
+	);
+}
+
+=head2 delete_item
+
+Deletes a single item from the table.
+
+Takes the following named parameters:
+
+=over 4
+
+=item * table - the table name
+
+=item * item - the item to delete, as a{ key => value } hashref
+
+=back
+
+=cut
+
+sub delete_item {
+	my $self = shift;
+	my %args = @_;
+
+	my %payload = (
+		TableName => $args{table},
+		ReturnConsumedCapacity => $args{capacity} ? 'TOTAL' : 'NONE',
+	);
+	foreach my $k (keys %{$args{item}}) {
+		my $v = $args{item}{$k};	
+		$payload{Key}{$k} = { type_for_value($v) => $v };
+	}
+
+	my $req = $self->make_request(
+		target => 'DeleteItem',
+		payload => \%payload,
+	);
+	$self->_request($req)->transform(
+		done => sub { $json->decode(shift) }
+	);
+}
+
 =head2 batch_get_item
 
 Retrieve a batch of items from one or more tables.
+
+Takes a coderef which will be called for each found item, followed by
+these named parameters:
+
+=over 4
+
+=item * items - the search spec, as { table => { attribute => 'value', ... }, ... }
+
+=back
 
 =cut
 
@@ -348,16 +527,6 @@ sub _request {
 	my $self = shift;
 	my $req = shift;
 	$self->implementation->request($req)
-}
-
-sub ua {
-	my $self = shift;
-	unless($self->{ua}) {
-		my $ua = Net::Async::HTTP->new;
-		$self->loop->add($ua);
-		$self->{ua} = $ua;
-	}
-	$self->{ua};
 }
 
 =head1 FUNCTIONS - Internal
