@@ -249,6 +249,29 @@ sub each_table {
 	};
 }
 
+=head2 list_tables
+
+Returns a L<Future> which will resolve with a list of all tables.
+
+Takes no parameters.
+
+ $ddb->list_tables->on_done(sub {
+  my @tbl = @_;
+  print "Table: $_\n" for @tbl;
+ });
+
+=cut
+
+sub list_tables {
+	my $self = shift;
+	my @tbl;
+	$self->each_table(sub {
+		push @tbl, shift
+	})->transform(
+		done => sub { @tbl }
+	);
+}
+
 =head2 put_item
 
 Writes a single item to the table.
@@ -346,7 +369,7 @@ Takes the following named parameters:
 
 =item * table - the table name
 
-=item * item - the item to delete, as a{ key => value } hashref
+=item * item - the item to delete, as a { key => value } hashref
 
 =back
 
