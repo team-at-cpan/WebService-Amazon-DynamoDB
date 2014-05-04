@@ -11,7 +11,7 @@ WebService::Amazon::DynamoDB::20120810 - interact with DynamoDB using API versio
 =cut
 
 use Future;
-use Future::Utils qw(repeat);
+use Future::Utils qw(try_repeat);
 use POSIX qw(strftime);
 use JSON::XS;
 use Scalar::Util qw(reftype);
@@ -203,12 +203,12 @@ Takes a single named parameter:
 sub wait_for_table {
 	my $self = shift;
 	my %args = @_;
-	repeat {
+	try_repeat {
 		$self->describe_table(%args)
 	} until => sub {
 		my $f = shift;
 		my $status = $f->get->{TableStatus};
-		warn "status: " . $status; 
+#		warn "status: " . $status; 
 		$status eq 'ACTIVE'
 	};
 }
@@ -227,7 +227,7 @@ sub each_table {
 	my %args = @_;
 	my %payload;
 	my $last_table;
-	repeat {
+	try_repeat {
 		$payload{ExclusiveStartTableName} = $args{start} if defined $args{start};
 		$payload{Limit} = $args{limit} if defined $args{limit};
 		my $req = $self->make_request(
@@ -433,7 +433,7 @@ sub batch_get_item {
 	}
 
 	my $finished = 0;
-	repeat {
+	try_repeat {
 		my $req = $self->make_request(
 			target => 'BatchGetItem',
 			payload => \%payload,
@@ -484,7 +484,7 @@ sub scan {
 	$payload{ScanFilter} = \%filter if %filter;
 	my $finished = 0;
 	my $count = 0;
-	repeat {
+	try_repeat {
 		my $req = $self->make_request(
 			target => 'Scan',
 			payload => \%payload,
@@ -587,6 +587,15 @@ sub type_for_value {
 		return 'N' if $flags & (B::SVp_IOK | B::SVp_NOK);
 		return 'S';
 	}
+}
+
+sub validate_table_name {
+	my ($self, $name) = @_;
+	die 'Table name is undefined' unless defined $name;
+	die 'Name too short' if length($name) < 3;
+	die 'Name too long' if length($name) > 255;
+	die 'Invalid characters in name' if $name =~ /[^a-zA-Z0-9_.-]/;
+	return 1;
 }
 
 1;
