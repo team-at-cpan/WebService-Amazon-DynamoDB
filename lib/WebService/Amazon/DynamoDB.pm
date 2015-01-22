@@ -3,7 +3,7 @@ package WebService::Amazon::DynamoDB;
 use strict;
 use warnings;
 
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 
 =head1 NAME
 
@@ -35,6 +35,12 @@ WebService::Amazon::DynamoDB - support for the AWS DynamoDB API
   },
  )->get;
 
+=head1 BEFORE YOU START
+
+B<NOTE>: I'd recommend looking at the L<Amazon::DynamoDB> module first.
+It is a fork of this one with better features, more comprehensive tests,
+and overall it's maintained much more actively.
+
 =head1 DESCRIPTION
 
 Provides a L<Future>-based API for Amazon's DynamoDB REST API.
@@ -44,16 +50,19 @@ Current implementations for issuing the HTTP requests:
 
 =over 4
 
-=item * L<WebService::Amazon::DynamoDB::NaHTTP> - use L<Net::Async::HTTP>
+=item * L<WebService::UA::NaHTTP> - use L<Net::Async::HTTP>
 for applications based on L<IO::Async> (this gives nonblocking behaviour)
 
-=item * L<WebService::Amazon::DynamoDB::LWP> - use L<LWP::UserAgent> (will
+=item * L<WebService::UA::LWP> - use L<LWP::UserAgent> (will
 block, timeouts are unlikely to work)
 
-=item * L<WebService::Amazon::DynamoDB::MojoUA> - use L<Mojo::UserAgent>,
-should be suitable for integration into a L<Mojolicious> application.
+=item * L<WebService::UA::MojoUA> - use L<Mojo::UserAgent>,
+should be suitable for integration into a L<Mojolicious> application (could
+be adapted for nonblocking, although the current version does not do this).
 
 =back
+
+Only the L<Net::Async::HTTP> implementation has had any significant testing or use.
 
 =cut
 
