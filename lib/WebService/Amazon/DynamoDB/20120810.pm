@@ -13,14 +13,14 @@ WebService::Amazon::DynamoDB::20120810 - interact with DynamoDB using API versio
 use Future;
 use Future::Utils qw(try_repeat);
 use POSIX qw(strftime);
-use JSON::XS;
+use JSON::MaybeXS;
 use Scalar::Util qw(reftype);
 use B qw(svref_2object);
 use HTTP::Request;
 
 use WebService::Amazon::Signature;
 
-my $json = JSON::XS->new;
+my $json = JSON::MaybeXS->new;
 
 =head2 new
 
@@ -63,6 +63,13 @@ sub algorithm { 'AWS4-HMAC-SHA256' }
 sub scope { shift->{scope} }
 sub access_key { shift->{access_key} }
 sub secret_key { shift->{secret_key} }
+
+=head2 security_token
+
+=cut
+
+sub security_token { shift->{security_token} }
+
 
 =head2 create_table
 
