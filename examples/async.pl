@@ -1,20 +1,23 @@
-#!/usr/bin/env perl 
+#!/usr/bin/env perl
 use strict;
 use warnings;
+
+use curry;
 use IO::Async::Loop;
 use WebService::Amazon::DynamoDB;
-use WebService::Amazon::DynamoDB::NaHTTP;
-use curry;
+use WebService::UA::NaHTTP;
 
 my $loop = IO::Async::Loop->new;
-my $impl = WebService::Amazon::DynamoDB::NaHTTP->new(loop => $loop);
+
+my $impl = WebService::UA::NaHTTP->new(loop => $loop);
 my $ddb = WebService::Amazon::DynamoDB->new(
 	implementation => $impl,
 	version        => '20120810',
 	access_key     => 'access_key',
 	secret_key     => 'secret_key',
+	region         => 'dev',
 	host           => 'localhost',
-	port           => 8000,
+	port           => 8009,
 );
 
 # First we create a table with a single hash-indexed field:
