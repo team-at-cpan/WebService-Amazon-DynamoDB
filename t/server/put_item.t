@@ -58,14 +58,14 @@ use Test::WebService::Amazon::DynamoDB::Server;
 	}, qr/ValidationException/, 'exception when primary key is missing');
 
 	is(exception {
-		$srv->put_item(
+		my $data = $srv->put_item(
 			TableName => 'test',
 			Item => {
-				id => {
-					S => 1
-				}
+				id => { S => "1" }
 			}
 		)->get;
+		isa_ok($data, 'HASH');
+		cmp_deeply($data, { }, 'nothing returned');
 	}, undef, 'no exception when primary key is provided');
 
 	is(exception {
@@ -75,6 +75,18 @@ use Test::WebService::Amazon::DynamoDB::Server;
 		is($details->{ItemCount}, 1, 'have an item');
 		cmp_ok($details->{TableSizeBytes}, '>', 0, 'table size is nonzero');
 	}, undef, 'describe table');
+	is(exception {
+		my $data = $srv->put_item(
+			TableName => 'test',
+			Item => {
+				id => { S => "1" }
+			},
+			ReturnValues => 'ALL_OLD',
+		)->get;
+		isa_ok($data, 'HASH');
+		cmp_deeply($data, { Attributes => { } }, 'had attributes in response');
+	}, undef, 'no exception on put');
+
 }
 
 done_testing;

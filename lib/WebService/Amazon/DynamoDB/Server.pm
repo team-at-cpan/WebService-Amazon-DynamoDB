@@ -190,26 +190,68 @@ sub put_item {
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => 'ACTIVE')->then(sub {
 		my $tbl = $self->{table_map}{$name};
+
 		my @id_fields = map $_->{AttributeName}, @{$tbl->{KeySchema}};
 		return Future->fail(
 			ValidationException =>
 		) for grep !exists $args{Item}{$_}, @id_fields;
+
 		my ($id) = join "\0", map values %{$args{Item}{$_}}, @id_fields;
 		$self->{data}{$name}{$id} = delete $args{Item};
-		++$tbl->{ItemCount};
-		$tbl->{TableSizeBytes} += length Encode::decode('UTF-8', $id);
-		Future->done(
-			+{
-				Attributes => [ ],
-				ConsumedCapacity => {
 
-				},
-				ItemCollectionMetrics => {
-
-				}
-			}
-		)
+		my %result;
+		Future->needs_all(
+			$self->return_values(delete $args{ReturnValues}),
+			$self->consumed_capacity(delete $args{ReturnConsumedCapacity}),
+			$self->collection_metrics(delete $args{ReturnItemCollectionMetrics}),
+		)->then(sub {
+			my ($attr, $capacity, $metrics) = @_;
+			$result{Attributes} = $attr if defined $attr;
+			$result{ConsumedCapacity} = $capacity if defined $capacity;
+			$result{ItemCollectionMetrics} = $metrics if defined $metrics;
+			++$tbl->{ItemCount};
+			$tbl->{TableSizeBytes} += length Encode::decode('UTF-8', $id);
+			Future->done(\%result);
+		});
 	})
+}
+
+sub return_values {
+	my ($self, $v) = @_;
+	return Future->done(undef) if !defined($v) || $v eq 'NONE';
+	if($v eq 'ALL_OLD') {
+		return Future->done({ })
+	} else {
+		return Future->fail(
+			ValidationException =>
+		)
+	}
+}
+
+sub consumed_capacity {
+	my ($self, $v) = @_;
+	return Future->done(undef) if !defined($v) || $v eq 'NONE';
+	if($v eq 'INDEXES') {
+		return Future->done({ })
+	} elsif($v eq 'TOTAL') {
+		return Future->done({ })
+	} else {
+		return Future->fail(
+			ValidationException =>
+		)
+	}
+}
+
+sub collection_metrics {
+	my ($self, $v) = @_;
+	return Future->done(undef) if !defined($v) || $v eq 'NONE';
+	if($v eq 'SIZE') {
+		return Future->done({ })
+	} else {
+		return Future->fail(
+			ValidationException =>
+		)
+	}
 }
 
 my %valid_table_status = map {; $_ => 1 } qw(CREATING DELETING UPDATING ACTIVE);
