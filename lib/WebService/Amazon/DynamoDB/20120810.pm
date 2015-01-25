@@ -61,7 +61,6 @@ sub implementation { shift->{implementation} }
 sub host { shift->{host} }
 sub port { shift->{port} }
 sub algorithm { 'AWS4-HMAC-SHA256' }
-sub scope { shift->{scope} }
 sub access_key { shift->{access_key} }
 sub secret_key { shift->{secret_key} }
 
@@ -553,6 +552,13 @@ sub make_request {
 	$req->header(Authorization => $amz->calculate_signature);
 	$req
 }
+
+sub scope {
+	my $self = shift;
+	join '/', strftime('%Y%m%d', gmtime), $self->region, qw(dynamodb aws4_request)
+}
+
+sub region { shift->{region} //= 'us-west-1' }
 
 sub _request {
 	my $self = shift;
