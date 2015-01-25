@@ -504,7 +504,7 @@ sub done {
 	my $sub = (caller 1)[3];
 	$sub =~ s/^.*:://;
 	my $f = Future->done($rslt);
-	$self->bus->invoke_event($sub => $req, $rslt, @details);
+	$self->bus->invoke_event($sub => $req, $f, @details);
 	$f
 }
 
