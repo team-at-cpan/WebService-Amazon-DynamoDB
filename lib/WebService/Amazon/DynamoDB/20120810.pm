@@ -528,7 +528,7 @@ sub make_request {
 	my $api_version = '20120810';
 	my $host = $self->host;
 	my $target = $args{target};
-	my $js = JSON::XS->new;
+	my $js = JSON::MaybeXS->new;
 	my $req = HTTP::Request->new(
 		POST => 'http://' . $self->host . ($self->port ? (':' . $self->port) : '') . '/'
 	);
