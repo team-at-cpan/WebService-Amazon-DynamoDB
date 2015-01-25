@@ -129,6 +129,34 @@ sub create_table {
 	});
 }
 
+sub describe_table {
+	my ($self, %args) = @_;
+
+	return Future->fail(
+		'ResourceNotFoundException'
+	) unless exists $args{TableName};
+
+	return Future->fail(
+		'ResourceNotFoundException'
+	) unless $self->have_table($args{TableName});
+
+	return Future->fail(
+		'ResourceNotFoundException'
+	) unless $self->{table_map}{$args{TableName}}{TableStatus} eq 'ACTIVE';
+
+	return Future->done({
+		Table => $self->{table_map}{$args{TableName}}
+	})
+}
+
+my %valid_table_status = map {; $_ => 1 } qw(CREATING ACTIVE);
+sub table_status {
+	my ($self, $name, $status) = @_;
+	return Future->fail('bad status') unless exists $valid_table_status{$status};
+	$self->{table_map}{$name}{TableStatus} = $status;
+	Future->done;
+}
+
 sub have_table {
 	my ($self, $name) = @_;
 	return exists $self->{table_map}{$name};
