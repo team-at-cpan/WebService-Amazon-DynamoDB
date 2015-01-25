@@ -24,7 +24,7 @@ sub drop_table {
 	my $name = $args{TableName};
 	extract_by { $_ eq $name } @{$self->{tables}};
 	delete $self->{table_map}{$name};
-	$self
+	Future->wrap
 }
 
 =head2 list_tables
@@ -132,44 +132,38 @@ sub create_table {
 sub describe_table {
 	my ($self, %args) = @_;
 
-	return Future->fail(
-		'ResourceNotFoundException'
-	) unless exists $args{TableName};
-
-	return Future->fail(
-		'ResourceNotFoundException'
-	) unless $self->have_table($args{TableName});
-
-	return Future->fail(
-		'ResourceNotFoundException'
-	) unless $self->{table_map}{$args{TableName}}{TableStatus} eq 'ACTIVE';
-
-	return Future->done({
-		Table => $self->{table_map}{$args{TableName}}
+	my $name = delete $args{TableName};
+	$self->validate_table_state($name => 'ACTIVE')->then(sub {
+		Future->done({
+			Table => $self->{table_map}{$name}
+		})
 	})
 }
 
-sub validate_table_active {
-	my ($self, %args) = @_;
-	return Future->fail(
-		'ResourceNotFoundException'
-	) unless exists $args{TableName};
+sub validate_table_state {
+	my ($self, $name, @allowed) = @_;
 
 	return Future->fail(
 		'ResourceNotFoundException'
-	) unless $self->have_table($args{TableName});
+	) unless defined $name;
 
 	return Future->fail(
 		'ResourceNotFoundException'
-	) unless $self->{table_map}{$args{TableName}}{TableStatus} eq 'ACTIVE';
+	) unless $self->have_table($name);
+
+	my $status = $self->{table_map}{$name}{TableStatus};
+	return Future->fail(
+		'ResourceInUseException'
+	) unless grep $status eq $_, @allowed;
+
 	Future->done;
 }
 
 sub update_table {
 	my ($self, %args) = @_;
 
-	$self->validate_table_active(%args)->then(sub {
-		my $name = delete $args{TableName};
+	my $name = delete $args{TableName};
+	$self->validate_table_state($name => 'ACTIVE')->then(sub {
 		my $tbl = $self->{table_map}{$name};
 		my %update;
 		if(my $throughput = delete $args{ProvisionedThroughput}) {
@@ -185,6 +179,23 @@ sub update_table {
 			$tbl->{$k}{$_} = $update{$k}{$_} for keys %{$update{$k}};
 		}
 		$self->table_status($name => 'UPDATING')->transform(done => sub {
+			+{
+				TableDescription => $tbl
+			}
+		})
+	})
+}
+
+sub delete_table {
+	my ($self, %args) = @_;
+
+	my $name = delete $args{TableName};
+	$self->validate_table_state($name => qw(ACTIVE DELETING))->then(sub {
+		return Future->fail(
+			'ValidationException - invalid keys provided'
+		) if keys %args;
+		my $tbl = $self->{table_map}{$name};
+		$self->table_status($name => 'DELETING')->transform(done => sub {
 			+{
 				TableDescription => $tbl
 			}

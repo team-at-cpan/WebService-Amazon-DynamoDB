@@ -34,7 +34,7 @@ use Test::WebService::Amazon::DynamoDB::Server;
 		$srv->update_table(
 			TableName => 'test'
 		)->get;
-	}, qr/ResourceNotFoundException/, 'exception when table is not yet active');
+	}, qr/ResourceInUseException/, 'exception when table is not yet active');
 
 	is(exception {
 		$srv->table_status(test => 'ACTIVE')->get
@@ -67,7 +67,7 @@ use Test::WebService::Amazon::DynamoDB::Server;
 				WriteCapacityUnits => "9",
 			}
 		)->get;
-	}, qr/ResourceNotFoundException/, 'exception when table is updating');
+	}, qr/ResourceInUseException/, 'exception when table is updating');
 
 	is(exception {
 		$srv->table_status(test => 'ACTIVE')->get
