@@ -525,6 +525,7 @@ sub fail {
 	return Future->fail('invalid API name ' . $sub) unless exists $API_METHODS{$sub};
 	my $f = Future->fail($exception => @details);
 	$self->bus->invoke_event($sub => $req, $f);
+	$self->bus->invoke_event(error => $req, $f);
 	$f
 }
 
