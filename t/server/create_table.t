@@ -105,6 +105,12 @@ use Test::WebService::Amazon::DynamoDB::Server;
 	}, undef, 'no exception when creating with all required parameters');
 
 	ok($srv->have_table('test_table'), 'table is now found');
+
+	like(exception {
+		$srv->create_table(
+			%args,
+		)->get;
+	}, qr/ResourceInUseException/, 'exception when creating duplicate table');
 }
 
 done_testing;

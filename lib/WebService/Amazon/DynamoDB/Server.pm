@@ -74,6 +74,7 @@ sub list_tables {
 
 sub create_table {
 	my ($self, %args) = @_;
+
 	return Future->fail(
 		'ValidationException - no AttributeDefinitions found'
 	) unless exists $args{AttributeDefinitions};
@@ -110,6 +111,10 @@ sub create_table {
 	return Future->fail(
 		'ValidationException - no ProvisionedThroughput found'
 	) unless exists $args{TableName};
+
+	return Future->fail(
+		'ResourceInUseException - this table exists already'
+	) if $self->have_table($args{TableName});
 
 	$args{TableStatus} = 'CREATING';
 	$args{ItemCount} = 0;
