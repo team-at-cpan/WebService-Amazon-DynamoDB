@@ -49,6 +49,19 @@ use Test::WebService::Amazon::DynamoDB::Server;
 			} ],
 			KeySchema => [ {
 				AttributeName => 'id',
+				KeyType => 'BAD'
+			} ],
+		)->get
+	}, qr/ValidationException.*KeyType.*HASH/, 'exception when creating with invalid key type');
+
+	like(exception {
+		$srv->create_table(
+			AttributeDefinitions => [ {
+				AttributeName => 'id',
+				AttributeType => 'S',
+			} ],
+			KeySchema => [ {
+				AttributeName => 'id',
 				KeyType => 'HASH'
 			} ],
 		)->get

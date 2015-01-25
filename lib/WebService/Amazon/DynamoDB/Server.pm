@@ -89,6 +89,14 @@ sub create_table {
 		'ValidationException - too many items found in KeySchema'
 	) if @{$args{KeySchema}} > 2;
 
+	return Future->fail(
+		'ValidationException - invalid KeyType, expected HASH'
+	) unless ($args{KeySchema}[0]{KeyType} // '') eq 'HASH';
+
+	return Future->fail(
+		'ValidationException - invalid KeyType, expected RANGE'
+	) if @{$args{KeySchema}} > 1 && ($args{KeySchema}[1]{KeyType} // '') ne 'RANGE';
+
 	my %attr = map {; $_->{AttributeName} => $_ } @{$args{AttributeDefinitions}};
 	return Future->fail(
 		'ValidationException - attribute ' . $_ . ' not found in AttributeDefinitions'
