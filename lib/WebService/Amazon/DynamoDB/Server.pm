@@ -11,6 +11,8 @@ WebService::Amazon::DynamoDB - support for the AWS DynamoDB API
 
 =cut
 
+use Mixin::Event::Dispatch::Bus;
+
 use Encode;
 use Future;
 use List::Util qw(min);
@@ -286,6 +288,9 @@ The following methods are not part of the standard DynamoDB public API,
 so they are not recommended for use directly.
 
 =cut
+
+sub bus { shift->{bus} //= Mixin::Event::Dispatch::Bus->new }
+
 =head2 add_table
 
 Adds this table - called by L</create_table> if everything passes validation.
@@ -430,6 +435,132 @@ sub validate_table_state {
 1;
 
 __END__
+
+=head1 EVENTS
+
+The following events may be raised on the message bus used by this
+class - use L<Mixin::Event::Dispatch/subscribe_to_event> to watch
+for them:
+
+ $srv->bus->subscribe_to_event(
+   list_tables => sub {
+     my ($ev, $tables, $req, $resp) = @_;
+	 ...
+   }
+ );
+
+Note that most of these include a L<Future> - the event is triggered
+once the L<Future> is marked as ready, so it should be safe to call
+C< get > to examine the current state:
+
+ $srv->bus->subscribe_to_event(
+   create_table => sub {
+     my ($ev, $tbl, $req, $resp) = @_;
+	 warn "Had a failed table creation request" unless eval { $resp->get };
+   }
+ );
+
+=head2 list_tables event
+
+List tables request.
+
+=over 4
+
+=item * $tbl - an array of L<WebService::Amazon::DynamoDB::Server::Table> instances
+
+=item * $request - the original request, as a hashref
+
+=item * $response - the response that will be sent back to the client, as a L<Future>
+
+=back
+
+=head2 describe_table event
+
+Describe table request.
+
+=over 4
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
+
+=item * $request - the original request, as a hashref
+
+=item * $response - the response that will be sent back to the client, as a L<Future>
+
+=back
+
+=head2 create_table event
+
+Called when have had a table creation request.
+
+=over 4
+
+=item * $tbl - the new L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
+
+=item * $request - the original request which caused the creation, as a hashref
+
+=item * $response - the response that will be sent back to the client, as a L<Future>
+
+=back
+
+=head2 update_table event
+
+A table update request.
+
+=over 4
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
+
+=item * $request - the original request which caused the creation, as a hashref
+
+=item * $response - the response that will be sent back to the client, as a L<Future>
+
+=back
+
+=head2 delete_table event
+
+Called when we have had a table deletion request.
+
+=over 4
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance that will be deleted, may be undef
+
+=item * $request - the original request which caused the creation, as a hashref
+
+=item * $response - the response that will be sent back to the client, as a L<Future>
+
+=back
+
+=head2 get_item event
+
+Get item request.
+
+=over 4
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
+
+=item * $item - the L<WebService::Amazon::DynamoDB::Server::Item> instance, may be undef
+
+=item * $request - the original request, as a hashref
+
+=item * $response - the response that will be sent back to the client, as a L<Future>
+
+=back
+
+=head2 put_item event
+
+Put item request.
+
+=over 4
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
+
+=item * $item - the L<WebService::Amazon::DynamoDB::Server::Item> instance, may be undef
+
+=item * $request - the original request, as a hashref
+
+=item * $response - the response that will be sent back to the client, as a L<Future>
+
+=back
 
 =head1 AUTHOR
 
