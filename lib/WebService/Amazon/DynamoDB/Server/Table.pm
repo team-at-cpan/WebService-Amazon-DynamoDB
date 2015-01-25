@@ -31,6 +31,8 @@ sub bus { shift->{bus} //= Mixin::Event::Dispatch::Bus->new }
 
 sub name { shift->{TableName} // die 'invalid table - no name' }
 
+sub state { shift->{TableStatus} }
+
 =head2 item_by_id
 
 =cut
