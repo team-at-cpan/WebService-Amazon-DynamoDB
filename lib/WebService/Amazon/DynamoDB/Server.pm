@@ -3,30 +3,32 @@ package WebService::Amazon::DynamoDB::Server;
 use strict;
 use warnings;
 
+=head1 NAME
+
+WebService::Amazon::DynamoDB - support for the AWS DynamoDB API
+
+=head1 DESCRIPTION
+
+=cut
+
 use Encode;
 use Future;
 use List::Util qw(min);
 use List::UtilsBy qw(extract_by);
 use Time::Moment;
 
+use WebService::Amazon::DynamoDB::Server::Table;
+use WebService::Amazon::DynamoDB::Server::Item;
+
+=head1 METHODS
+
+=cut
+
+=head2 new
+
+=cut
+
 sub new { my $class = shift; bless {@_}, $class }
-
-sub add_table {
-	my ($self, %args) = @_;
-	$args{TableName} = delete $args{name} if exists $args{name};
-	push @{$self->{tables}}, \%args;
-	$self->{table_map}{$args{TableName}} = \%args;
-	$self
-}
-
-sub drop_table {
-	my ($self, %args) = @_;
-	$args{TableName} = delete $args{name} if exists $args{name};
-	my $name = $args{TableName};
-	extract_by { $_ eq $name } @{$self->{tables}};
-	delete $self->{table_map}{$name};
-	Future->wrap
-}
 
 =head2 list_tables
 
@@ -205,16 +207,62 @@ sub put_item {
 			$self->consumed_capacity(delete $args{ReturnConsumedCapacity}),
 			$self->collection_metrics(delete $args{ReturnItemCollectionMetrics}),
 		)->then(sub {
-			my ($attr, $capacity, $metrics) = @_;
-			$result{Attributes} = $attr if defined $attr;
-			$result{ConsumedCapacity} = $capacity if defined $capacity;
-			$result{ItemCollectionMetrics} = $metrics if defined $metrics;
-			++$tbl->{ItemCount};
+			# Only add the keys if they were requested
+			for(qw(Attributes ConsumedCapacity ItemCollectionMetrics)) {
+				my $item = shift;
+				$result{$_} = $item if defined $item
+			}
+
+			# Commit the changes
+			++$tbl->{ItemCount} if $new;
 			$tbl->{TableSizeBytes} += length Encode::decode('UTF-8', $id);
+
 			Future->done(\%result);
 		});
 	})
 }
+
+=head2 METHODS - Internal
+
+The following methods are not part of the standard DynamoDB public API,
+so they are not recommended for use directly.
+
+=cut
+
+=head2 add_table
+
+Adds this table - called by L</create_table> if everything passes validation.
+
+=cut
+
+sub add_table {
+	my ($self, %args) = @_;
+	$args{TableName} = delete $args{name} if exists $args{name};
+	push @{$self->{tables}}, \%args;
+	$self->{table_map}{$args{TableName}} = \%args;
+	$self
+}
+
+=head2 drop_table
+
+Drops the table - called to remove a table that was previously in 'DELETING' state.
+
+=cut
+
+sub drop_table {
+	my ($self, %args) = @_;
+	$args{TableName} = delete $args{name} if exists $args{name};
+	my $name = $args{TableName};
+	extract_by { $_ eq $name } @{$self->{tables}};
+	delete $self->{table_map}{$name};
+	Future->wrap
+}
+
+=head2 return_values
+
+Resolves to the attributes requested for this update.
+
+=cut
 
 sub return_values {
 	my ($self, $v) = @_;
@@ -227,6 +275,12 @@ sub return_values {
 		)
 	}
 }
+
+=head2 consumed_capacity
+
+Returns consumed capacity information if available.
+
+=cut
 
 sub consumed_capacity {
 	my ($self, $v) = @_;
@@ -242,6 +296,12 @@ sub consumed_capacity {
 	}
 }
 
+=head2 collection_metrics
+
+Resolves to collection metrics information, if available.
+
+=cut
+
 sub collection_metrics {
 	my ($self, $v) = @_;
 	return Future->done(undef) if !defined($v) || $v eq 'NONE';
@@ -255,6 +315,13 @@ sub collection_metrics {
 }
 
 my %valid_table_status = map {; $_ => 1 } qw(CREATING DELETING UPDATING ACTIVE);
+
+=head2 table_status
+
+Update or return current table status.
+
+=cut
+
 sub table_status {
 	my ($self, $name, $status) = @_;
 	if(defined $status) {
@@ -264,10 +331,22 @@ sub table_status {
 	Future->done($self->{table_map}{$name}{TableStatus});
 }
 
+=head2 have_table
+
+Returns true if we have this table.
+
+=cut
+
 sub have_table {
 	my ($self, $name) = @_;
-	return exists $self->{table_map}{$name};
+	return scalar exists $self->{table_map}{$name};
 }
+
+=head2 validate_table_state
+
+Raises various exceptions based on table state.
+
+=cut
 
 sub validate_table_state {
 	my ($self, $name, @allowed) = @_;
@@ -289,4 +368,15 @@ sub validate_table_state {
 }
 
 1;
+
+__END__
+
+=head1 AUTHOR
+
+Tom Molesworth <cpan@entitymodel.com>
+
+=head1 LICENSE
+
+Copyright Tom Molesworth 2013. Licensed under the same terms as Perl itself.
+
 
