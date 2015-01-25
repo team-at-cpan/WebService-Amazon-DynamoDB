@@ -199,6 +199,7 @@ sub put_item {
 		) for grep !exists $args{Item}{$_}, @id_fields;
 
 		my ($id) = join "\0", map values %{$args{Item}{$_}}, @id_fields;
+		my $new = !exists $self->{data}{$name}{$id};
 		$self->{data}{$name}{$id} = delete $args{Item};
 
 		my %result;

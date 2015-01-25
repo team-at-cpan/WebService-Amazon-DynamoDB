@@ -86,7 +86,13 @@ use Test::WebService::Amazon::DynamoDB::Server;
 		isa_ok($data, 'HASH');
 		cmp_deeply($data, { Attributes => { } }, 'had attributes in response');
 	}, undef, 'no exception on put');
-
+	is(exception {
+		my $details = $srv->describe_table(
+			TableName => 'test'
+		)->get->{Table};
+		is($details->{ItemCount}, 1, 'still have one item');
+		cmp_ok($details->{TableSizeBytes}, '>', 0, 'table size is nonzero');
+	}, undef, 'describe table');
 }
 
 done_testing;
