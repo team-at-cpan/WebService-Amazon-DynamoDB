@@ -229,7 +229,6 @@ The following methods are not part of the standard DynamoDB public API,
 so they are not recommended for use directly.
 
 =cut
-
 =head2 add_table
 
 Adds this table - called by L</create_table> if everything passes validation.
