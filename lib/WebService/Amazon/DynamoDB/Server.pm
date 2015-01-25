@@ -16,11 +16,13 @@ use Mixin::Event::Dispatch::Bus;
 use Encode;
 use Future;
 use List::Util qw(min);
-use List::UtilsBy qw(extract_by);
+use List::UtilsBy qw(extract_by sort_by);
 use Time::Moment;
 
 use WebService::Amazon::DynamoDB::Server::Table;
 use WebService::Amazon::DynamoDB::Server::Item;
+
+use constant LIST_TABLES_MAX => 100;
 
 =head1 METHODS
 
@@ -60,23 +62,25 @@ ListTables (p. 58)
 
 sub list_tables {
 	my ($self, %args) = @_;
+	my $req = { %args };
 
-	my @names = sort map $_->name, @{$self->{tables}};
+	my @tables = sort_by { $_->name } @{$self->{tables}};
 	if(exists $args{ExclusiveStartTableName}) {
-		return Future->fail(
+		return $self->fail(
+			$req,
 			'ValidationException: table ' . $args{ExclusiveStartTableName} . ' not found', 
 		) unless $self->have_table($args{ExclusiveStartTableName});
 
-		shift @names while @names && $names[0] ne $args{ExclusiveStartTableName};
+		shift @tables while @tables && $tables[0]->name ne $args{ExclusiveStartTableName};
 	}
-	use constant LIST_TABLES_MAX => 100;
 	my $limit = min(LIST_TABLES_MAX, $args{Limit} // ());
 	my %result;
-	if(@names > $limit) {
-		($result{LastEvaluatedTableName}) = splice @names, $limit;
+	if(@tables > $limit) {
+		my ($last) = splice @tables, $limit;
+		$result{LastEvaluatedTableName} = $last->name;
 	}
-	$result{TableNames} = \@names;
-	Future->wrap(\%result)
+	$result{TableNames} = [ map $_->name, @tables ];
+	$self->done(\%result, $req, \@tables)
 }
 
 =head2 create_table
@@ -87,45 +91,56 @@ CreateTable (p. 22)
 
 sub create_table {
 	my ($self, %args) = @_;
+	my $req = { %args };
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - no AttributeDefinitions found'
 	) unless exists $args{AttributeDefinitions};
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - no KeySchema found'
 	) unless exists $args{KeySchema};
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - empty KeySchema found'
 	) unless @{$args{KeySchema}};
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - too many items found in KeySchema'
 	) if @{$args{KeySchema}} > 2;
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - invalid KeyType, expected HASH'
 	) unless ($args{KeySchema}[0]{KeyType} // '') eq 'HASH';
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - invalid KeyType, expected RANGE'
 	) if @{$args{KeySchema}} > 1 && ($args{KeySchema}[1]{KeyType} // '') ne 'RANGE';
 
 	my %attr = map {; $_->{AttributeName} => $_ } @{$args{AttributeDefinitions}};
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - attribute ' . $_ . ' not found in AttributeDefinitions'
 	) for grep !exists $attr{$_}, map $_->{AttributeName}, @{$args{KeySchema}};
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - no ProvisionedThroughput found'
 	) unless exists $args{ProvisionedThroughput};
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ValidationException - no ProvisionedThroughput found'
 	) unless exists $args{TableName};
 
-	return Future->fail(
+	return $self->fail(
+		$req,
 		'ResourceInUseException - this table exists already'
 	) if $self->have_table($args{TableName});
 
@@ -133,13 +148,13 @@ sub create_table {
 	$args{ItemCount} = 0;
 	$args{TableSizeBytes} = 0;
 	$args{CreationDateTime} = Time::Moment->now;
-	$self->add_table(%args);
-	Future->done({
+	my $tbl = $self->add_table(%args);
+	$self->done({
 		TableDescription => {
 			%args,
 			CreationDateTime => $args{CreationDateTime}->to_string,
 		}
-	});
+	}, $req, $tbl);
 }
 
 =head2 describe_table
@@ -150,12 +165,14 @@ DescribeTable (p. 47)
 
 sub describe_table {
 	my ($self, %args) = @_;
+	my $req = { %args };
 
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => 'ACTIVE')->then(sub {
-		Future->done({
-			Table => $self->{table_map}{$name}
-		})
+		my $tbl = $self->{table_map}{$name};
+		$self->done({
+			Table => $tbl
+		}, $req, $tbl)
 	})
 }
 
@@ -167,6 +184,7 @@ UpdateTable (p. 119)
 
 sub update_table {
 	my ($self, %args) = @_;
+	my $req = { %args };
 
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => 'ACTIVE')->then(sub {
@@ -178,7 +196,8 @@ sub update_table {
 		if(my $index = delete $args{GlobalSecondaryIndexUpdates}) {
 			$update{GlobalSecondaryIndexUpdates}{$_} = $index->{$_} for keys %$index;
 		}
-		return Future->fail(
+		return $self->fail(
+			$req,
 			'ValidationException - invalid keys provided'
 		) if keys %args;
 		for my $k (keys %update) {
@@ -200,10 +219,12 @@ DeleteTable (p. 43)
 
 sub delete_table {
 	my ($self, %args) = @_;
+	my $req = { %args };
 
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => qw(ACTIVE DELETING))->then(sub {
-		return Future->fail(
+		return $self->fail(
+			$req,
 			'ValidationException - invalid keys provided'
 		) if keys %args;
 		my $tbl = $self->{table_map}{$name};
@@ -223,13 +244,15 @@ PutItem (p. 61)
 
 sub put_item {
 	my ($self, %args) = @_;
+	my $req = { %args };
+
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => 'ACTIVE')->then(sub {
 		my $tbl = $self->{table_map}{$name};
 		$tbl->validate_id_for_item_data($args{Item})->then(sub {
 			my $id = shift;
 			my $new = !exists $self->{data}{$name}{$id};
-			$self->{data}{$name}{$id} = delete $args{Item};
+			my $item = $self->{data}{$name}{$id} = delete $args{Item};
 
 			my %result;
 			Future->needs_all(
@@ -239,15 +262,15 @@ sub put_item {
 			)->then(sub {
 				# Only add the keys if they were requested
 				for(qw(Attributes ConsumedCapacity ItemCollectionMetrics)) {
-					my $item = shift;
-					$result{$_} = $item if defined $item
+					my $k = shift;
+					$result{$_} = $k if defined $k
 				}
 
 				# Commit the changes
 				++$tbl->{ItemCount} if $new;
 				$tbl->{TableSizeBytes} += length Encode::decode('UTF-8', $id);
 
-				Future->done(\%result);
+				$self->done(\%result, $req, $tbl, $item);
 			});
 		})
 	})
@@ -261,22 +284,25 @@ GetItem (p. 52)
 
 sub get_item {
 	my ($self, %args) = @_;
+	my $req = { %args };
+
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => 'ACTIVE')->then(sub {
 		my $tbl = $self->{table_map}{$name};
 		$tbl->validate_id_for_item_data($args{Key})->then(sub {
 			my $id = shift;
 			my %result;
+			my $item;
 			if(exists $self->{data}{$name}{$id}) {
-				$result{Item} = $self->{data}{$name}{$id}
+				$item = $result{Item} = $self->{data}{$name}{$id}
 			}
 			return $self->consumed_capacity(delete $args{ReturnConsumedCapacity})->then(sub {
 				# Only add the keys if they were requested
 				for(qw(ConsumedCapacity)) {
-					my $item = shift;
-					$result{$_} = $item if defined $item
+					my $k = shift;
+					$result{$_} = $k if defined $k
 				}
-				return Future->done(\%result);
+				return $self->done(\%result, $req, $tbl, $item);
 			})
 		})
 	})
@@ -290,22 +316,25 @@ UpdateItem (p. 103)
 
 sub update_item {
 	my ($self, %args) = @_;
+	my $req = { %args };
+
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => 'ACTIVE')->then(sub {
 		my $tbl = $self->{table_map}{$name};
 		$tbl->validate_id_for_item_data($args{Key})->then(sub {
 			my $id = shift;
 			my %result;
+			my $item;
 			if(exists $self->{data}{$name}{$id}) {
-				$result{Item} = $self->{data}{$name}{$id}
+				$item = $result{Item} = $self->{data}{$name}{$id}
 			}
 			return $self->consumed_capacity(delete $args{ReturnConsumedCapacity})->then(sub {
 				# Only add the keys if they were requested
 				for(qw(ConsumedCapacity)) {
-					my $item = shift;
-					$result{$_} = $item if defined $item
+					my $k = shift;
+					$result{$_} = $k if defined $k
 				}
-				return Future->done(\%result);
+				return $self->done(\%result, $req, $item);
 			})
 		})
 	})
@@ -349,7 +378,7 @@ sub drop_table {
 	my $name = $args{TableName};
 	extract_by { $_->name eq $name } @{$self->{tables}} or return Future->fail('table not found');
 	delete $self->{table_map}{$name} or return Future->fail('table not found in map');
-	Future->wrap
+	$self->done
 }
 
 =head2 return_values
@@ -360,7 +389,7 @@ Resolves to the attributes requested for this update.
 
 sub return_values {
 	my ($self, $v) = @_;
-	return Future->done(undef) if !defined($v) || $v eq 'NONE';
+	return $self->done(undef) if !defined($v) || $v eq 'NONE';
 	if($v eq 'ALL_OLD') {
 		return Future->done({ })
 	} else {
@@ -461,6 +490,24 @@ sub validate_table_state {
 	Future->done;
 }
 
+sub fail {
+	my ($self, $req, $exception, @details) = @_;
+	my $sub = (caller 1)[3];
+	$sub =~ s/^.*:://;
+	my $f = Future->fail($exception => @details);
+	$self->bus->invoke_event($sub => $req, $f);
+	$f
+}
+
+sub done {
+	my ($self, $rslt, $req, @details) = @_;
+	my $sub = (caller 1)[3];
+	$sub =~ s/^.*:://;
+	my $f = Future->done($rslt);
+	$self->bus->invoke_event($sub => $req, $rslt, @details);
+	$f
+}
+
 1;
 
 __END__
@@ -495,11 +542,11 @@ List tables request.
 
 =over 4
 
-=item * $tbl - an array of L<WebService::Amazon::DynamoDB::Server::Table> instances
-
 =item * $request - the original request, as a hashref
 
 =item * $response - the response that will be sent back to the client, as a L<Future>
+
+=item * $tbl - an array of L<WebService::Amazon::DynamoDB::Server::Table> instances
 
 =back
 
@@ -509,11 +556,11 @@ Describe table request.
 
 =over 4
 
-=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
-
 =item * $request - the original request, as a hashref
 
 =item * $response - the response that will be sent back to the client, as a L<Future>
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
 
 =back
 
@@ -523,11 +570,11 @@ Called when have had a table creation request.
 
 =over 4
 
-=item * $tbl - the new L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
-
 =item * $request - the original request which caused the creation, as a hashref
 
 =item * $response - the response that will be sent back to the client, as a L<Future>
+
+=item * $tbl - the new L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
 
 =back
 
@@ -537,11 +584,11 @@ A table update request.
 
 =over 4
 
-=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
-
 =item * $request - the original request which caused the creation, as a hashref
 
 =item * $response - the response that will be sent back to the client, as a L<Future>
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
 
 =back
 
@@ -551,11 +598,11 @@ Called when we have had a table deletion request.
 
 =over 4
 
-=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance that will be deleted, may be undef
-
 =item * $request - the original request which caused the creation, as a hashref
 
 =item * $response - the response that will be sent back to the client, as a L<Future>
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance that will be deleted, may be undef
 
 =back
 
@@ -565,13 +612,13 @@ Get item request.
 
 =over 4
 
-=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
-
-=item * $item - the L<WebService::Amazon::DynamoDB::Server::Item> instance, may be undef
-
 =item * $request - the original request, as a hashref
 
 =item * $response - the response that will be sent back to the client, as a L<Future>
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
+
+=item * $item - the L<WebService::Amazon::DynamoDB::Server::Item> instance, may be undef
 
 =back
 
@@ -581,13 +628,13 @@ Put item request.
 
 =over 4
 
-=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
-
-=item * $item - the L<WebService::Amazon::DynamoDB::Server::Item> instance, may be undef
-
 =item * $request - the original request, as a hashref
 
 =item * $response - the response that will be sent back to the client, as a L<Future>
+
+=item * $tbl - the L<WebService::Amazon::DynamoDB::Server::Table> instance, may be undef
+
+=item * $item - the L<WebService::Amazon::DynamoDB::Server::Item> instance, may be undef
 
 =back
 
@@ -598,5 +645,4 @@ Tom Molesworth <cpan@perlsite.co.uk>
 =head1 LICENSE
 
 Copyright Tom Molesworth 2013-2015. Licensed under the same terms as Perl itself.
-
 
