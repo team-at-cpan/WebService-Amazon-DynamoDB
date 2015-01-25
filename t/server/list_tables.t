@@ -41,6 +41,13 @@ use Test::WebService::Amazon::DynamoDB::Server;
 			)->get
 		], bag(@tables), "have expected tables when paging");
 	}, undef, 'no exception when listing paginated tables');
+
+	# We should get some sort of error with an invalid starting table
+	like(exception {
+		$srv->list_tables(
+			ExclusiveStartTableName => 'does_not_exist'
+		)->get
+	}, qr/ValidationException/, 'bad starting table name raises exception');
 }
 
 done_testing;
