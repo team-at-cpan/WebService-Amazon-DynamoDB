@@ -83,6 +83,13 @@ sub validate_id_for_item_data {
 	Future->done($id);
 }
 
+sub item_from_data {
+	my ($self, $data) = @_;
+	WebService::Amazon::DynamoDB::Server::Item->new(
+		attributes => $data
+	);
+}
+
 1;
 
 __END__

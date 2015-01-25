@@ -269,7 +269,8 @@ sub put_item {
 		$tbl->validate_id_for_item_data($args{Item})->then(sub {
 			my $id = shift;
 			my $new = !exists $self->{data}{$name}{$id};
-			my $item = $self->{data}{$name}{$id} = delete $args{Item};
+			my $item = $tbl->item_from_data(delete $args{Item});
+			$self->{data}{$name}{$id} = $item;
 
 			my %result;
 			Future->needs_all(
