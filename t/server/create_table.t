@@ -12,23 +12,11 @@ use WebService::Amazon::DynamoDB::Server;
 use Test::WebService::Amazon::DynamoDB::Server;
 
 {
-	my $srv = ddb_server { };
-	my $create_table_events = 0;
-	$srv->bus->subscribe_to_event(
-		create_table => sub {
-			my ($ev, $req, $rslt, $tbl) = @_;
-			++$create_table_events;
-			isa_ok($req, 'HASH') or note explain $req;
-			isa_ok($rslt, 'Future') or note explain $rslt;
-			ok($rslt->is_ready, '... and it is ready');
-			if($rslt->failure) {
-				is($tbl, undef, 'undef table on failure');
-				like($rslt->failure, qr/Exception/, 'had the word "exception" somewhere');
-			} else {
-				isa_ok($tbl, 'WebService::Amazon::DynamoDB::Server::Table') or note explain $tbl;
-			}
-		}
-	);
+	my $srv = ddb_server {
+		expect_events {
+			create_table => 9
+		};
+	};
 
 	like(exception {
 		$srv->create_table->get
@@ -127,7 +115,6 @@ use Test::WebService::Amazon::DynamoDB::Server;
 			%args,
 		)->get;
 	}, qr/ResourceInUseException/, 'exception when creating duplicate table');
-	is($create_table_events, 9, 'had correct number of events');
 }
 
 done_testing;

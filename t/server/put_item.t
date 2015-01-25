@@ -26,25 +26,11 @@ use Test::WebService::Amazon::DynamoDB::Server;
 				ReadCapacityUnits => "5",
 				WriteCapacityUnits => "5",
 			}
-		)
+		);
+		expect_events {
+			put_item => 6
+		};
 	};
-	my $put_item_events = 0;
-	$srv->bus->subscribe_to_event(
-		put_item => sub {
-			my ($ev, $req, $rslt, $tbl, $item) = @_;
-			++$put_item_events;
-			isa_ok($req, 'HASH') or note explain $req;
-			isa_ok($rslt, 'Future') or note explain $rslt;
-			ok($rslt->is_ready, '... and it is ready');
-			if($rslt->failure) {
-				is($tbl, undef, 'undef table on failure');
-				like($rslt->failure, qr/Exception/, 'had the word "exception" somewhere');
-			} else {
-				isa_ok($tbl, 'WebService::Amazon::DynamoDB::Server::Table') or note explain $tbl;
-				isa_ok($item, 'WebService::Amazon::DynamoDB::Server::Item') or note explain $item;
-			}
-		}
-	);
 	ok($srv->have_table('test'), 'have starting table');
 
 	like(exception {
@@ -110,7 +96,6 @@ use Test::WebService::Amazon::DynamoDB::Server;
 		is($details->{ItemCount}, 1, 'still have one item');
 		cmp_ok($details->{TableSizeBytes}, '>', 0, 'table size is nonzero');
 	}, undef, 'describe table');
-	is($put_item_events, 6, 'had correct number of events');
 }
 
 done_testing;

@@ -26,7 +26,10 @@ use Test::WebService::Amazon::DynamoDB::Server;
 				ReadCapacityUnits => "5",
 				WriteCapacityUnits => "5",
 			}
-		)
+		);
+		expect_events {
+			get_item => 4
+		};
 	};
 	ok($srv->have_table('test'), 'have starting table');
 

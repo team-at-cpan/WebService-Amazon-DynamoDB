@@ -9,6 +9,7 @@ BEGIN {
 	our @EXPORT = our @EXPORT_OK = qw(
 		fmap_over
 		ddb_server
+		expect_events
 		add_table
 	);
 }
@@ -53,6 +54,75 @@ sub ddb_server(&;@) {
 sub add_table(@) {
 	my %args = @_;
 	$SRV->add_table(%args);
+}
+
+sub expect_events($) {
+	my $stat = shift;
+
+	my $event_info = {
+		create_table => sub {
+			my ($tbl) = @_;
+			isa_ok($tbl, 'WebService::Amazon::DynamoDB::Server::Table') or note explain $tbl;
+		},
+		delete_table => sub {
+			my ($tbl) = @_;
+			isa_ok($tbl, 'WebService::Amazon::DynamoDB::Server::Table') or note explain $tbl;
+		},
+		update_table => sub {
+			my ($tbl) = @_;
+			isa_ok($tbl, 'WebService::Amazon::DynamoDB::Server::Table') or note explain $tbl;
+		},
+		describe_table => sub {
+			my ($tbl) = @_;
+			isa_ok($tbl, 'WebService::Amazon::DynamoDB::Server::Table') or note explain $tbl;
+		},
+		list_tables => sub {
+			my ($tables) = @_;
+			isa_ok($tables, 'ARRAY') or note explain $tables;
+			for(grep !$_->isa('WebService::Amazon::DynamoDB::Server::Table'), @$tables) {
+				fail("unexpected entry in tables");
+				note explain $_;
+			}
+		},
+		get_item => sub {
+			my ($tbl, $item) = @_;
+			isa_ok($tbl, 'WebService::Amazon::DynamoDB::Server::Table') or note explain $tbl;
+			isa_ok($item, 'WebService::Amazon::DynamoDB::Server::Item') or note explain $item;
+		},
+		put_item => sub {
+			my ($tbl, $item) = @_;
+			isa_ok($tbl, 'WebService::Amazon::DynamoDB::Server::Table') or note explain $tbl;
+			isa_ok($item, 'WebService::Amazon::DynamoDB::Server::Item') or note explain $item;
+		}
+	};
+	for (sort keys %$event_info) {
+		my $k = $_;
+		my $code = $event_info->{$k};
+		$SRV->bus->subscribe_to_event(
+			$k => sub {
+				my ($ev, $req, $rslt, @extra) = @_;
+				note "Had $k event";
+				# Reduce pending count for this type - we're aiming for 0
+				--$stat->{$k} if exists $stat->{$k};
+				isa_ok($req, 'HASH') or note explain $req;
+				isa_ok($rslt, 'Future') or note explain $rslt;
+				ok($rslt->is_ready, '... and it is ready');
+				if($rslt->failure) {
+					like($rslt->failure, qr/Exception/, 'had the word "exception" somewhere');
+				} else {
+					$code->(@extra);
+				}
+			}
+		);
+	}
+
+	# Report on status when our object is cleaned up
+	$SRV->bus->subscribe_to_event(
+		destroy => sub {
+			my ($ev, $srv) = @_;
+			is($stat->{$_}, 0, $_ . ' events triggered as expected') for sort keys %$stat;
+		}
+	)
 }
 
 1;

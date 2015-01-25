@@ -327,8 +327,14 @@ sub get_item {
 					$result{$_} = $k if defined $k
 				}
 				return $self->done(get_item => \%result, $req, $tbl, $item);
+			}, sub {
+				$self->fail(get_item => $req, @_)
 			})
+		}, sub {
+			$self->fail(get_item => $req, @_)
 		})
+	}, sub {
+		$self->fail(get_item => $req, @_)
 	})
 }
 
@@ -530,6 +536,11 @@ sub done {
 	my $f = Future->done($rslt);
 	$self->bus->invoke_event($sub => $req, $f, @details);
 	$f
+}
+
+sub DESTROY {
+	my ($self) = @_;
+	$self->bus->invoke_event(destroy => );
 }
 
 1;
