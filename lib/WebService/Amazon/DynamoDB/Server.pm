@@ -11,14 +11,16 @@ sub new { my $class = shift; bless {@_}, $class }
 
 sub add_table {
 	my ($self, %args) = @_;
+	$args{TableName} = delete $args{name} if exists $args{name};
 	push @{$self->{tables}}, \%args;
-	$self->{table_map}{$args{name}} = \%args;
+	$self->{table_map}{$args{TableName}} = \%args;
 	$self
 }
 
 sub drop_table {
 	my ($self, %args) = @_;
-	my $name = $args{name};
+	$args{TableName} = delete $args{name} if exists $args{name};
+	my $name = $args{TableName};
 	extract_by { $_ eq $name } @{$self->{tables}};
 	delete $self->{table_map}{$name};
 	$self
@@ -51,10 +53,10 @@ Resolves to a hashref containing the following data:
 sub list_tables {
 	my ($self, %args) = @_;
 
-	my @names = sort map $_->{name}, @{$self->{tables}};
+	my @names = sort map $_->{TableName}, @{$self->{tables}};
 	if(exists $args{ExclusiveStartTableName}) {
 		return Future->fail(
-			'table ' . $args{ExclusiveStartTableName} . ' not found', 
+			'ValidationException: table ' . $args{ExclusiveStartTableName} . ' not found', 
 		) unless $self->have_table($args{ExclusiveStartTableName});
 
 		shift @names while @names && $names[0] ne $args{ExclusiveStartTableName};
