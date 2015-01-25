@@ -149,12 +149,57 @@ sub describe_table {
 	})
 }
 
-my %valid_table_status = map {; $_ => 1 } qw(CREATING ACTIVE);
+sub validate_table_active {
+	my ($self, %args) = @_;
+	return Future->fail(
+		'ResourceNotFoundException'
+	) unless exists $args{TableName};
+
+	return Future->fail(
+		'ResourceNotFoundException'
+	) unless $self->have_table($args{TableName});
+
+	return Future->fail(
+		'ResourceNotFoundException'
+	) unless $self->{table_map}{$args{TableName}}{TableStatus} eq 'ACTIVE';
+	Future->done;
+}
+
+sub update_table {
+	my ($self, %args) = @_;
+
+	$self->validate_table_active(%args)->then(sub {
+		my $name = delete $args{TableName};
+		my $tbl = $self->{table_map}{$name};
+		my %update;
+		if(my $throughput = delete $args{ProvisionedThroughput}) {
+			$update{ProvisionedThroughput}{$_} = $throughput->{$_} for grep exists $throughput->{$_}, qw(ReadCapacityUnits WriteCapacityUnits);
+		}
+		if(my $index = delete $args{GlobalSecondaryIndexUpdates}) {
+			$update{GlobalSecondaryIndexUpdates}{$_} = $index->{$_} for keys %$index;
+		}
+		return Future->fail(
+			'ValidationException - invalid keys provided'
+		) if keys %args;
+		for my $k (keys %update) {
+			$tbl->{$k}{$_} = $update{$k}{$_} for keys %{$update{$k}};
+		}
+		$self->table_status($name => 'UPDATING')->transform(done => sub {
+			+{
+				TableDescription => $tbl
+			}
+		})
+	})
+}
+
+my %valid_table_status = map {; $_ => 1 } qw(CREATING DELETING UPDATING ACTIVE);
 sub table_status {
 	my ($self, $name, $status) = @_;
-	return Future->fail('bad status') unless exists $valid_table_status{$status};
-	$self->{table_map}{$name}{TableStatus} = $status;
-	Future->done;
+	if(defined $status) {
+		return Future->fail('bad status') unless exists $valid_table_status{$status};
+		$self->{table_map}{$name}{TableStatus} = $status
+	}
+	Future->done($self->{table_map}{$name}{TableStatus});
 }
 
 sub have_table {
