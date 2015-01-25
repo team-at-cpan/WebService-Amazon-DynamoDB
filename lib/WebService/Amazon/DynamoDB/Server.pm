@@ -282,6 +282,35 @@ sub get_item {
 	})
 }
 
+=head2 update_item
+
+UpdateItem (p. 103)
+
+=cut
+
+sub update_item {
+	my ($self, %args) = @_;
+	my $name = delete $args{TableName};
+	$self->validate_table_state($name => 'ACTIVE')->then(sub {
+		my $tbl = $self->{table_map}{$name};
+		$tbl->validate_id_for_item_data($args{Key})->then(sub {
+			my $id = shift;
+			my %result;
+			if(exists $self->{data}{$name}{$id}) {
+				$result{Item} = $self->{data}{$name}{$id}
+			}
+			return $self->consumed_capacity(delete $args{ReturnConsumedCapacity})->then(sub {
+				# Only add the keys if they were requested
+				for(qw(ConsumedCapacity)) {
+					my $item = shift;
+					$result{$_} = $item if defined $item
+				}
+				return Future->done(\%result);
+			})
+		})
+	})
+}
+
 =head2 METHODS - Internal
 
 The following methods are not part of the standard DynamoDB public API,
