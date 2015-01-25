@@ -15,6 +15,7 @@ use Mixin::Event::Dispatch::Bus;
 
 use Encode;
 use Future;
+use Future::Utils qw(call);
 use List::Util qw(min);
 use List::UtilsBy qw(extract_by sort_by);
 use Time::Moment;
@@ -23,6 +24,16 @@ use WebService::Amazon::DynamoDB::Server::Table;
 use WebService::Amazon::DynamoDB::Server::Item;
 
 use constant LIST_TABLES_MAX => 100;
+
+our %API_METHODS = map {; $_ => 1 } qw(
+	list_tables
+	create_table
+	delete_table
+	update_table
+	describe_table
+	get_item
+	put_item
+);
 
 =head1 METHODS
 
@@ -67,7 +78,7 @@ sub list_tables {
 	my @tables = sort_by { $_->name } @{$self->{tables}};
 	if(exists $args{ExclusiveStartTableName}) {
 		return $self->fail(
-			$req,
+			list_tables => $req,
 			'ValidationException: table ' . $args{ExclusiveStartTableName} . ' not found', 
 		) unless $self->have_table($args{ExclusiveStartTableName});
 
@@ -80,7 +91,7 @@ sub list_tables {
 		$result{LastEvaluatedTableName} = $last->name;
 	}
 	$result{TableNames} = [ map $_->name, @tables ];
-	$self->done(\%result, $req, \@tables)
+	$self->done(list_tables => \%result, $req, \@tables)
 }
 
 =head2 create_table
@@ -94,53 +105,53 @@ sub create_table {
 	my $req = { %args };
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - no AttributeDefinitions found'
 	) unless exists $args{AttributeDefinitions};
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - no KeySchema found'
 	) unless exists $args{KeySchema};
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - empty KeySchema found'
 	) unless @{$args{KeySchema}};
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - too many items found in KeySchema'
 	) if @{$args{KeySchema}} > 2;
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - invalid KeyType, expected HASH'
 	) unless ($args{KeySchema}[0]{KeyType} // '') eq 'HASH';
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - invalid KeyType, expected RANGE'
 	) if @{$args{KeySchema}} > 1 && ($args{KeySchema}[1]{KeyType} // '') ne 'RANGE';
 
 	my %attr = map {; $_->{AttributeName} => $_ } @{$args{AttributeDefinitions}};
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - attribute ' . $_ . ' not found in AttributeDefinitions'
 	) for grep !exists $attr{$_}, map $_->{AttributeName}, @{$args{KeySchema}};
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - no ProvisionedThroughput found'
 	) unless exists $args{ProvisionedThroughput};
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ValidationException - no ProvisionedThroughput found'
 	) unless exists $args{TableName};
 
 	return $self->fail(
-		$req,
+		create_table => $req,
 		'ResourceInUseException - this table exists already'
 	) if $self->have_table($args{TableName});
 
@@ -149,7 +160,7 @@ sub create_table {
 	$args{TableSizeBytes} = 0;
 	$args{CreationDateTime} = Time::Moment->now;
 	my $tbl = $self->add_table(%args);
-	$self->done({
+	$self->done(create_table => {
 		TableDescription => {
 			%args,
 			CreationDateTime => $args{CreationDateTime}->to_string,
@@ -170,9 +181,11 @@ sub describe_table {
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => 'ACTIVE')->then(sub {
 		my $tbl = $self->{table_map}{$name};
-		$self->done({
+		$self->done(describe_table => {
 			Table => $tbl
 		}, $req, $tbl)
+	}, sub {
+		$self->fail(describe_table => $req, @_)
 	})
 }
 
@@ -197,17 +210,19 @@ sub update_table {
 			$update{GlobalSecondaryIndexUpdates}{$_} = $index->{$_} for keys %$index;
 		}
 		return $self->fail(
-			$req,
+			update_table => $req,
 			'ValidationException - invalid keys provided'
 		) if keys %args;
 		for my $k (keys %update) {
 			$tbl->{$k}{$_} = $update{$k}{$_} for keys %{$update{$k}};
 		}
-		$self->table_status($name => 'UPDATING')->transform(done => sub {
-			+{
+		$self->table_status($name => 'UPDATING')->then(sub {
+			$self->done(update_table => {
 				TableDescription => $tbl
-			}
+			}, $req, $tbl)
 		})
+	}, sub {
+		$self->fail(update_table => $req, @_)
 	})
 }
 
@@ -224,15 +239,17 @@ sub delete_table {
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => qw(ACTIVE DELETING))->then(sub {
 		return $self->fail(
-			$req,
+			delete_table => $req,
 			'ValidationException - invalid keys provided'
 		) if keys %args;
 		my $tbl = $self->{table_map}{$name};
-		$self->table_status($name => 'DELETING')->transform(done => sub {
-			+{
+		$self->table_status($name => 'DELETING')->then(sub {
+			$self->done(delete_table => {
 				TableDescription => $tbl
-			}
+			}, $req, $tbl)
 		})
+	}, sub {
+		$self->fail(delete_table => $req, @_)
 	})
 }
 
@@ -270,9 +287,15 @@ sub put_item {
 				++$tbl->{ItemCount} if $new;
 				$tbl->{TableSizeBytes} += length Encode::decode('UTF-8', $id);
 
-				$self->done(\%result, $req, $tbl, $item);
+				$self->done(put_item => \%result, $req, $tbl, $item);
+			}, sub {
+				$self->fail(put_item => $req, @_)
 			});
+		}, sub {
+			$self->fail(put_item => $req, @_)
 		})
+	}, sub {
+		$self->fail(put_item => $req, @_)
 	})
 }
 
@@ -302,7 +325,7 @@ sub get_item {
 					my $k = shift;
 					$result{$_} = $k if defined $k
 				}
-				return $self->done(\%result, $req, $tbl, $item);
+				return $self->done(get_item => \%result, $req, $tbl, $item);
 			})
 		})
 	})
@@ -334,7 +357,7 @@ sub update_item {
 					my $k = shift;
 					$result{$_} = $k if defined $k
 				}
-				return $self->done(\%result, $req, $item);
+				return $self->done(update_item => \%result, $req, $item);
 			})
 		})
 	})
@@ -363,7 +386,7 @@ sub add_table {
 	);
 	push @{$self->{tables}}, $tbl;
 	$self->{table_map}{$tbl->name} = $tbl;
-	$self
+	$tbl
 }
 
 =head2 drop_table
@@ -378,7 +401,7 @@ sub drop_table {
 	my $name = $args{TableName};
 	extract_by { $_->name eq $name } @{$self->{tables}} or return Future->fail('table not found');
 	delete $self->{table_map}{$name} or return Future->fail('table not found in map');
-	$self->done
+	Future->done
 }
 
 =head2 return_values
@@ -389,7 +412,7 @@ Resolves to the attributes requested for this update.
 
 sub return_values {
 	my ($self, $v) = @_;
-	return $self->done(undef) if !defined($v) || $v eq 'NONE';
+	return Future->done(undef) if !defined($v) || $v eq 'NONE';
 	if($v eq 'ALL_OLD') {
 		return Future->done({ })
 	} else {
@@ -491,18 +514,18 @@ sub validate_table_state {
 }
 
 sub fail {
-	my ($self, $req, $exception, @details) = @_;
-	my $sub = (caller 1)[3];
-	$sub =~ s/^.*:://;
+	my ($self, $sub, $req, $exception, @details) = @_;
+	return Future->fail('invalid API name ' . $sub) unless exists $API_METHODS{$sub};
 	my $f = Future->fail($exception => @details);
 	$self->bus->invoke_event($sub => $req, $f);
 	$f
 }
 
+use Carp qw(confess);
 sub done {
-	my ($self, $rslt, $req, @details) = @_;
-	my $sub = (caller 1)[3];
-	$sub =~ s/^.*:://;
+	my ($self, $sub, $rslt, $req, @details) = @_;
+	confess 'wtf' unless defined $sub;
+	return Future->fail('invalid API name ' . $sub) unless exists $API_METHODS{$sub};
 	my $f = Future->done($rslt);
 	$self->bus->invoke_event($sub => $req, $f, @details);
 	$f
