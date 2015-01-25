@@ -6,6 +6,7 @@ use warnings;
 use Future;
 use List::Util qw(min);
 use List::UtilsBy qw(extract_by);
+use Time::Moment;
 
 sub new { my $class = shift; bless {@_}, $class }
 
@@ -110,8 +111,17 @@ sub create_table {
 		'ValidationException - no ProvisionedThroughput found'
 	) unless exists $args{TableName};
 
+	$args{TableStatus} = 'CREATING';
+	$args{ItemCount} = 0;
+	$args{TableSizeBytes} = 0;
+	$args{CreationDateTime} = Time::Moment->now;
 	$self->add_table(%args);
-	Future->wrap;
+	Future->done({
+		TableDescription => {
+			%args,
+			CreationDateTime => $args{CreationDateTime}->to_string,
+		}
+	});
 }
 
 sub have_table {

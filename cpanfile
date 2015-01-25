@@ -7,6 +7,7 @@ requires 'WebService::Amazon::Signature', 0;
 requires 'WebService::UA', 0;
 requires 'Module::Load', 0;
 requires 'HTTP::Request', 0;
+requires 'Time::Moment', 0;
 
 on 'test' => sub {
 	requires 'Test::More', '>= 0.98';

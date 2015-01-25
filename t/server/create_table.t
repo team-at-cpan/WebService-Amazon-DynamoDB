@@ -90,9 +90,18 @@ use Test::WebService::Amazon::DynamoDB::Server;
 
 	$args{TableName} = 'test_table';
 	is(exception {
-		$srv->create_table(
+		my ($create) = $srv->create_table(
 			%args,
-		)->get
+		)->get;
+		isa_ok($create, 'HASH');
+		ok(exists $create->{TableDescription}, 'have TableDescription') or note explain $create;
+		cmp_deeply([ keys %$create ], bag('TableDescription'), 'no other keys');
+		my $spec = $create->{TableDescription};
+		cmp_deeply($spec->{$_}, $args{$_}, "$_ matches") for sort keys %args;
+		is($spec->{ItemCount}, 0, 'zero item count');
+		is($spec->{TableSizeBytes}, 0, 'zero size');
+		is($spec->{TableStatus}, 'CREATING', 'starts as CREATING status');
+		cmp_ok(abs(Time::Moment->from_string($spec->{CreationDateTime})->epoch - time), '<=', 10, 'creation time is about right');
 	}, undef, 'no exception when creating with all required parameters');
 
 	ok($srv->have_table('test_table'), 'table is now found');
