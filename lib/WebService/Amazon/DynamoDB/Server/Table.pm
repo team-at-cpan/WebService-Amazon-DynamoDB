@@ -7,6 +7,7 @@ use Future;
 use Future::Utils qw(repeat);
 
 use WebService::Amazon::DynamoDB::Server::Item;
+use Mixin::Event::Dispatch::Bus;
 
 use constant DYNAMODB_INDEX_OVERHEAD => 100;
 
@@ -15,6 +16,14 @@ use constant DYNAMODB_INDEX_OVERHEAD => 100;
 =cut
 
 sub new { my $class = shift; bless {@_}, $class }
+
+=head2 bus
+
+The event bus used by this instance.
+
+=cut
+
+sub bus { shift->{bus} //= Mixin::Event::Dispatch::Bus->new }
 
 =head2 name
 
