@@ -52,12 +52,14 @@ Resolves to a hashref containing the following data:
 
 =back
 
+ListTables (p. 58)
+
 =cut
 
 sub list_tables {
 	my ($self, %args) = @_;
 
-	my @names = sort map $_->{TableName}, @{$self->{tables}};
+	my @names = sort map $_->name, @{$self->{tables}};
 	if(exists $args{ExclusiveStartTableName}) {
 		return Future->fail(
 			'ValidationException: table ' . $args{ExclusiveStartTableName} . ' not found', 
@@ -74,6 +76,12 @@ sub list_tables {
 	$result{TableNames} = \@names;
 	Future->wrap(\%result)
 }
+
+=head2 create_table
+
+CreateTable (p. 22)
+
+=cut
 
 sub create_table {
 	my ($self, %args) = @_;
@@ -132,6 +140,12 @@ sub create_table {
 	});
 }
 
+=head2 describe_table
+
+DescribeTable (p. 47)
+
+=cut
+
 sub describe_table {
 	my ($self, %args) = @_;
 
@@ -142,6 +156,12 @@ sub describe_table {
 		})
 	})
 }
+
+=head2 update_table
+
+UpdateTable (p. 119)
+
+=cut
 
 sub update_table {
 	my ($self, %args) = @_;
@@ -170,6 +190,12 @@ sub update_table {
 	})
 }
 
+=head2 delete_table
+
+DeleteTable (p. 43)
+
+=cut
+
 sub delete_table {
 	my ($self, %args) = @_;
 
@@ -186,6 +212,12 @@ sub delete_table {
 		})
 	})
 }
+
+=head2 put_item
+
+PutItem (p. 61)
+
+=cut
 
 sub put_item {
 	my ($self, %args) = @_;
