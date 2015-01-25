@@ -1,4 +1,5 @@
 package WebService::Amazon::DynamoDB::20120810;
+
 use strict;
 use warnings;
 
