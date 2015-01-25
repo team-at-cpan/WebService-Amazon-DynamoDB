@@ -239,8 +239,11 @@ Adds this table - called by L</create_table> if everything passes validation.
 sub add_table {
 	my ($self, %args) = @_;
 	$args{TableName} = delete $args{name} if exists $args{name};
-	push @{$self->{tables}}, \%args;
-	$self->{table_map}{$args{TableName}} = \%args;
+	my $tbl = WebService::Amazon::DynamoDB::Server::Table->new(
+		%args
+	);
+	push @{$self->{tables}}, $tbl;
+	$self->{table_map}{$tbl->name} = $tbl;
 	$self
 }
 
@@ -254,8 +257,8 @@ sub drop_table {
 	my ($self, %args) = @_;
 	$args{TableName} = delete $args{name} if exists $args{name};
 	my $name = $args{TableName};
-	extract_by { $_ eq $name } @{$self->{tables}};
-	delete $self->{table_map}{$name};
+	extract_by { $_->name eq $name } @{$self->{tables}} or return Future->fail('table not found');
+	delete $self->{table_map}{$name} or return Future->fail('table not found in map');
 	Future->wrap
 }
 
