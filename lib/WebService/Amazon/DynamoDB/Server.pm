@@ -224,34 +224,59 @@ sub put_item {
 	my $name = delete $args{TableName};
 	$self->validate_table_state($name => 'ACTIVE')->then(sub {
 		my $tbl = $self->{table_map}{$name};
+		$tbl->validate_id_for_item_data($args{Item})->then(sub {
+			my $id = shift;
+			my $new = !exists $self->{data}{$name}{$id};
+			$self->{data}{$name}{$id} = delete $args{Item};
 
-		my @id_fields = map $_->{AttributeName}, @{$tbl->{KeySchema}};
-		return Future->fail(
-			ValidationException =>
-		) for grep !exists $args{Item}{$_}, @id_fields;
+			my %result;
+			Future->needs_all(
+				$self->return_values(delete $args{ReturnValues}),
+				$self->consumed_capacity(delete $args{ReturnConsumedCapacity}),
+				$self->collection_metrics(delete $args{ReturnItemCollectionMetrics}),
+			)->then(sub {
+				# Only add the keys if they were requested
+				for(qw(Attributes ConsumedCapacity ItemCollectionMetrics)) {
+					my $item = shift;
+					$result{$_} = $item if defined $item
+				}
 
-		my ($id) = join "\0", map values %{$args{Item}{$_}}, @id_fields;
-		my $new = !exists $self->{data}{$name}{$id};
-		$self->{data}{$name}{$id} = delete $args{Item};
+				# Commit the changes
+				++$tbl->{ItemCount} if $new;
+				$tbl->{TableSizeBytes} += length Encode::decode('UTF-8', $id);
 
-		my %result;
-		Future->needs_all(
-			$self->return_values(delete $args{ReturnValues}),
-			$self->consumed_capacity(delete $args{ReturnConsumedCapacity}),
-			$self->collection_metrics(delete $args{ReturnItemCollectionMetrics}),
-		)->then(sub {
-			# Only add the keys if they were requested
-			for(qw(Attributes ConsumedCapacity ItemCollectionMetrics)) {
-				my $item = shift;
-				$result{$_} = $item if defined $item
+				Future->done(\%result);
+			});
+		})
+	})
+}
+
+=head2 get_item
+
+GetItem (p. 52)
+
+=cut
+
+sub get_item {
+	my ($self, %args) = @_;
+	my $name = delete $args{TableName};
+	$self->validate_table_state($name => 'ACTIVE')->then(sub {
+		my $tbl = $self->{table_map}{$name};
+		$tbl->validate_id_for_item_data($args{Key})->then(sub {
+			my $id = shift;
+			my %result;
+			if(exists $self->{data}{$name}{$id}) {
+				$result{Item} = $self->{data}{$name}{$id}
 			}
-
-			# Commit the changes
-			++$tbl->{ItemCount} if $new;
-			$tbl->{TableSizeBytes} += length Encode::decode('UTF-8', $id);
-
-			Future->done(\%result);
-		});
+			return $self->consumed_capacity(delete $args{ReturnConsumedCapacity})->then(sub {
+				# Only add the keys if they were requested
+				for(qw(ConsumedCapacity)) {
+					my $item = shift;
+					$result{$_} = $item if defined $item
+				}
+				return Future->done(\%result);
+			})
+		})
 	})
 }
 

@@ -55,5 +55,15 @@ sub bytes_used {
 	}
 }
 
+sub validate_id_for_item_data {
+	my ($self, $data) = @_;
+	my @id_fields = map $_->{AttributeName}, @{$self->{KeySchema}};
+	return Future->fail(
+		ValidationException =>
+	) for grep !exists $data->{$_}, @id_fields;
+
+	my ($id) = join "\0", map values %{$data->{$_}}, @id_fields;
+	Future->done($id);
+}
 1;
 
