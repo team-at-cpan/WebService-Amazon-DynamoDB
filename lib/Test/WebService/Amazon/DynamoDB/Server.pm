@@ -5,6 +5,17 @@ use warnings;
 
 use parent qw(Exporter);
 
+=head1 NAME
+
+Test::WebService::Amazon::DynamoDB - functions for testing the DynamoDB code
+
+=head1 DESCRIPTION
+
+Mostly intended as convenience functions for the 
+L<WebService::Amazon::DynamoDB::Server> test suite.
+
+=cut
+
 BEGIN {
 	our @EXPORT = our @EXPORT_OK = qw(
 		fmap_over
@@ -44,6 +55,27 @@ sub fmap_over(&;@) {
 	})
 }
 
+=head2 ddb_server
+
+Runs a block of code with a custom L<WebService::Amazon::DynamoDB::Server> instance.
+
+Primarily intended as a visual aid to allow setting
+up the test spec:
+
+ my $srv = ddb_server {
+  add_table name => 'xyz', ...;
+  expect_events {
+   put_item => 3,
+   get_item => 4,
+   describe_table => 1
+  }
+ };
+ ...
+
+Returns that instance when done.
+
+=cut
+
 sub ddb_server(&;@) {
 	my ($code) = shift;
 	local $SRV = new_ok('WebService::Amazon::DynamoDB::Server');
@@ -51,10 +83,28 @@ sub ddb_server(&;@) {
 	$SRV
 }
 
+=head2 add_table
+
+Adds the given table spec.
+
+=cut
+
 sub add_table(@) {
 	my %args = @_;
 	$SRV->add_table(%args);
 }
+
+=head2 expect_events
+
+Indicates that we're expecting certain events to fire.
+
+ expect_events {
+  create_table => 7,
+  delete_table => 2,
+  put_item => 5
+ }
+
+=cut
 
 sub expect_events($) {
 	my $stat = shift;
@@ -126,4 +176,14 @@ sub expect_events($) {
 }
 
 1;
+
+__END__
+
+=head1 AUTHOR
+
+Tom Molesworth <cpan@perlsite.co.uk>
+
+=head1 LICENSE
+
+Copyright Tom Molesworth 2013-2015. Licensed under the same terms as Perl itself.
 
