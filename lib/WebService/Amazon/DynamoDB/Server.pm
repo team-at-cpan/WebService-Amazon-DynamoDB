@@ -3,6 +3,7 @@ package WebService::Amazon::DynamoDB::Server;
 use strict;
 use warnings;
 
+use Encode;
 use Future;
 use List::Util qw(min);
 use List::UtilsBy qw(extract_by);
@@ -140,25 +141,6 @@ sub describe_table {
 	})
 }
 
-sub validate_table_state {
-	my ($self, $name, @allowed) = @_;
-
-	return Future->fail(
-		'ResourceNotFoundException'
-	) unless defined $name;
-
-	return Future->fail(
-		'ResourceNotFoundException'
-	) unless $self->have_table($name);
-
-	my $status = $self->{table_map}{$name}{TableStatus};
-	return Future->fail(
-		'ResourceInUseException'
-	) unless grep $status eq $_, @allowed;
-
-	Future->done;
-}
-
 sub update_table {
 	my ($self, %args) = @_;
 
@@ -203,6 +185,33 @@ sub delete_table {
 	})
 }
 
+sub put_item {
+	my ($self, %args) = @_;
+	my $name = delete $args{TableName};
+	$self->validate_table_state($name => 'ACTIVE')->then(sub {
+		my $tbl = $self->{table_map}{$name};
+		my @id_fields = map $_->{AttributeName}, @{$tbl->{KeySchema}};
+		return Future->fail(
+			ValidationException =>
+		) for grep !exists $args{Item}{$_}, @id_fields;
+		my ($id) = join "\0", map values %{$args{Item}{$_}}, @id_fields;
+		$self->{data}{$name}{$id} = delete $args{Item};
+		++$tbl->{ItemCount};
+		$tbl->{TableSizeBytes} += length Encode::decode('UTF-8', $id);
+		Future->done(
+			+{
+				Attributes => [ ],
+				ConsumedCapacity => {
+
+				},
+				ItemCollectionMetrics => {
+
+				}
+			}
+		)
+	})
+}
+
 my %valid_table_status = map {; $_ => 1 } qw(CREATING DELETING UPDATING ACTIVE);
 sub table_status {
 	my ($self, $name, $status) = @_;
@@ -216,6 +225,25 @@ sub table_status {
 sub have_table {
 	my ($self, $name) = @_;
 	return exists $self->{table_map}{$name};
+}
+
+sub validate_table_state {
+	my ($self, $name, @allowed) = @_;
+
+	return Future->fail(
+		'ResourceNotFoundException'
+	) unless defined $name;
+
+	return Future->fail(
+		'ResourceNotFoundException'
+	) unless $self->have_table($name);
+
+	my $status = $self->{table_map}{$name}{TableStatus};
+	return Future->fail(
+		'ResourceInUseException'
+	) unless grep $status eq $_, @allowed;
+
+	Future->done;
 }
 
 1;
