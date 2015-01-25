@@ -71,6 +71,41 @@ sub list_tables {
 	Future->wrap(\%result)
 }
 
+sub create_table {
+	my ($self, %args) = @_;
+	return Future->fail(
+		'ValidationException - no AttributeDefinitions found'
+	) unless exists $args{AttributeDefinitions};
+
+	return Future->fail(
+		'ValidationException - no KeySchema found'
+	) unless exists $args{KeySchema};
+
+	return Future->fail(
+		'ValidationException - empty KeySchema found'
+	) unless @{$args{KeySchema}};
+
+	return Future->fail(
+		'ValidationException - too many items found in KeySchema'
+	) if @{$args{KeySchema}} > 2;
+
+	my %attr = map {; $_->{AttributeName} => $_ } @{$args{AttributeDefinitions}};
+	return Future->fail(
+		'ValidationException - attribute ' . $_ . ' not found in AttributeDefinitions'
+	) for grep !exists $attr{$_}, map $_->{AttributeName}, @{$args{KeySchema}};
+
+	return Future->fail(
+		'ValidationException - no ProvisionedThroughput found'
+	) unless exists $args{ProvisionedThroughput};
+
+	return Future->fail(
+		'ValidationException - no ProvisionedThroughput found'
+	) unless exists $args{TableName};
+
+	$self->add_table(%args);
+	Future->wrap;
+}
+
 sub have_table {
 	my ($self, $name) = @_;
 	return exists $self->{table_map}{$name};
