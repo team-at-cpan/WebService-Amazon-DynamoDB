@@ -1,6 +1,8 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+
+0.002     2015-01-26 16:36:17+00:00 Europe/London
 	Note that you should be using Amazon::DynamoDB unless you *really* have
 	a good reason to be looking at this module. Most of the current development
 	here is only intended to support the DynamoDB server implementation.
