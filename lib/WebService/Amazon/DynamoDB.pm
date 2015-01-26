@@ -146,29 +146,92 @@ sub make_request {
 	my $http_date = strftime('%a, %d %b %Y %H:%M:%S %Z', localtime);
 	$req->protocol('HTTP/1.1');
 	$req->header( 'Date' => $http_date );
+	$req->header( 'x-amz-date' => strftime('%Y%m%dT%H%M%SZ', gmtime) );
 	$req->header( 'x-amz-target', 'DynamoDB_'. $self->api_version. '.'. $target );
 	$req->header( 'content-type' => 'application/x-amz-json-1.0' );
 	my $payload = $js->encode($args{payload});
 	$req->content($payload);
 	$req->header( 'Content-Length' => length($payload));
-	my $amz = WebService::Amazon::Signature->new(
-		version    => 4,
-		algorithm  => $self->algorithm,
-		access_key => $self->access_key,
-		scope      => $self->scope,
-		secret_key => $self->secret_key,
-	);
-	$amz->from_http_request($req);
-	$req->header(Authorization => $amz->calculate_signature);
-	Future->done($req)
+	$self->credentials->then(sub {
+		my ($creds) = @_;
+		$log->debugf("Using [%s] for credentials", $creds);
+		my $token = delete $creds->{token};
+		my $amz = WebService::Amazon::Signature->new(
+			version    => 4,
+			algorithm  => $self->algorithm,
+			scope      => $self->scope,
+			%$creds,
+		);
+		$amz->from_http_request($req);
+		$req->header(Authorization => $amz->calculate_signature);
+		$req->header('X-Amz-Security-Token' => $token) if defined $token;
+		Future->done($req)
+	})
+}
+
+sub credentials {
+	my ($self) = @_;
+	if($self->security eq 'key') {
+		$log->debugf("Using key-based security");
+		return Future->done({
+			access_key => $self->access_key,
+			secret_key => $self->secret_key,
+		})
+	}
+
+	return $self->cached_iam_credentials->else(sub {
+		$log->debug("No cached credentials (or already expired)");
+		$self->find_iam_role->then(sub {
+			my ($role) = @_;
+			$log->debugf("Found role [%s]", $role);
+			$self->retrieve_iam_credentials(
+				$role
+			)
+		})
+	});
+}
+
+sub cached_iam_credentials {
+	my ($self) = @_;
+	return Future->fail('no cached credentials') unless exists $self->{cached_iam_credentials};
+
+	# Assume expired if we're within 5 seconds
+	return Future->fail('cached credentials expire') if $self->{cached_iam_credentials}{expire_at} <= time - 5;
+
+	return Future->done($self->{cached_iam_credentials}{details});
+}
+
+sub find_iam_role {
+	my ($self) = @_;
+	$self->{iam_role} //= $self->iam->active_roles
+}
+
+sub retrieve_iam_credentials {
+	my ($self, $role) = @_;
+	$self->iam->credentials_for_role($role)->then(sub {
+		my ($creds, $expiry) = @_;
+		$log->debugf("New credentials received, will expire in %s seconds", strftime '%H:%M:%S', gmtime($expiry - time));
+		$self->{cached_iam_credentials} = {
+			expire_at => $expiry,
+			details => $creds
+		};
+		Future->done($creds)
+	})
 }
 
 sub _request {
 	my $self = shift;
 	my $req = shift;
+	$log->debugf("Issuing request [%s]", $req->as_string("\n"));
 	$self->implementation->request($req)
 }
 
+sub iam {
+	$_[0]->{iam} //= WebService::Amazon::IAM::Client->new(
+		ua => $_[0]->implementation,
+		base_uri => 'http://localhost:8088',
+	)
+}
 
 1;
 
