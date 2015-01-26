@@ -173,6 +173,8 @@ sub credentials {
 	my ($self) = @_;
 	if($self->security eq 'key') {
 		$log->debugf("Using key-based security");
+		# We don't bother caching the hashref, since we'd need to be passing
+		# a copy anyway (caller may change the values)
 		return Future->done({
 			access_key => $self->access_key,
 			secret_key => $self->secret_key,
@@ -198,7 +200,10 @@ sub cached_iam_credentials {
 	# Assume expired if we're within 5 seconds
 	return Future->fail('cached credentials expire') if $self->{cached_iam_credentials}{expire_at} <= time - 5;
 
-	return Future->done($self->{cached_iam_credentials}{details});
+	# Shallow copy, so we're not affected if the caller changes the values
+	return Future->done({
+		%{ $self->{cached_iam_credentials}{details} }
+	})
 }
 
 sub find_iam_role {
@@ -215,7 +220,8 @@ sub retrieve_iam_credentials {
 			expire_at => $expiry,
 			details => $creds
 		};
-		Future->done($creds)
+		# Shallow copy, so we're not affected if the caller changes the values
+		Future->done({ %$creds })
 	})
 }
 
