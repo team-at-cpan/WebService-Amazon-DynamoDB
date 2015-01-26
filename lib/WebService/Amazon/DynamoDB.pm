@@ -114,7 +114,7 @@ sub new {
 		if(exists $args{host} or exists $args{port}) {
 			$args{uri} = URI->new('http://' . $args{host} . ':' . $args{port});
 		} else {
-			$args{uri} ||= 'https://dynamodb.' . $args{region} . '.amazonaws.com';
+			$args{uri} ||= 'https://dynamodb.' . $args{region} . '.amazonaws.com/';
 			$args{uri} = URI->new($args{uri}) unless ref $args{uri};
 		}
 		return $code->($class, %args)
