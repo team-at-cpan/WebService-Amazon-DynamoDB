@@ -124,11 +124,12 @@ sub create_table {
 			KeyType       => $type || 'HASH',
 		}
 	}
-	my $req = $self->make_request(
+	$self->make_request(
 		target => 'CreateTable',
 		payload => \%payload,
-	);
-	$self->_request($req)
+	)->then(sub {
+		$self->_request(shift)
+	})
 }
 
 =head2 describe_table
@@ -153,14 +154,15 @@ sub describe_table {
 	my %payload = (
 		TableName => $args{table},
 	);
-	my $req = $self->make_request(
+	$self->make_request(
 		target => 'DescribeTable',
 		payload => \%payload,
-	);
-	$self->_request($req)->transform(
-		# Sadly not the same key as used in DeleteTable
-		done => sub { my $content = shift; $json->decode($content)->{Table}; }
-	);
+	)->then(sub {
+		$self->_request(shift)->transform(
+			# Sadly not the same key as used in DeleteTable
+			done => sub { my $content = shift; $self->json->decode($content)->{Table}; }
+		);
+	})
 }
 
 =head2 delete_table
@@ -183,14 +185,15 @@ sub delete_table {
 	my %payload = (
 		TableName => $args{table},
 	);
-	my $req = $self->make_request(
+	$self->make_request(
 		target => 'DeleteTable',
 		payload => \%payload,
-	);
-	$self->_request($req)->transform(
-		# Sadly not the same key as used in DescribeTable
-		done => sub { my $content = shift; $json->decode($content)->{TableDescription} }
-	);
+	)->then(sub {
+		$self->_request(shift)->transform(
+			# Sadly not the same key as used in DescribeTable
+			done => sub { my $content = shift; $self->json->decode($content)->{TableDescription} }
+		)
+	})
 }
 
 =head2 wait_for_table
@@ -237,13 +240,14 @@ sub each_table {
 	try_repeat {
 		$payload{ExclusiveStartTableName} = $args{start} if defined $args{start};
 		$payload{Limit} = $args{limit} if defined $args{limit};
-		my $req = $self->make_request(
+		$self->make_request(
 			target => 'ListTables',
 			payload => \%payload,
-		);
-		$self->_request($req)->on_done(sub {
+		)->then(sub {
+			$self->_request(shift)
+		})->on_done(sub {
 			my $rslt = shift;
-			my $data = $json->decode($rslt);
+			my $data = $self->json->decode($rslt);
 			for my $tbl (@{$data->{TableNames}}) {
 				$code->($tbl);
 			}
@@ -308,15 +312,15 @@ sub put_item {
 		$payload{Item}{$k} = { type_for_value($v) => $v };
 	}
 
-	my $req = $self->make_request(
+	$self->make_request(
 		target => 'PutItem',
 		payload => \%payload,
-	);
-	$self->_request($req)->transform(
-		# Sadly not the same key as used in DeleteTable
-		done => sub { $json->decode(shift)->{Table}; }
-	);
-
+	)->then(sub {
+		$self->_request(shift)->transform(
+			# Sadly not the same key as used in DeleteTable
+			done => sub { $self->json->decode(shift)->{Table}; }
+		);
+	})
 }
 
 =head2 update_item
@@ -360,10 +364,11 @@ sub update_item {
 	my $req = $self->make_request(
 		target => 'UpdateItem',
 		payload => \%payload,
-	);
-	$self->_request($req)->transform(
-		done => sub { $json->decode(shift) }
-	);
+	)->then(sub {
+		$self->_request(shift)->transform(
+			done => sub { $self->json->decode(shift) }
+		);
+	})
 }
 
 =head2 delete_item
@@ -398,10 +403,11 @@ sub delete_item {
 	my $req = $self->make_request(
 		target => 'DeleteItem',
 		payload => \%payload,
-	);
-	$self->_request($req)->transform(
-		done => sub { $json->decode(shift) }
-	);
+	)->then(sub {
+		$self->_request(shift)->transform(
+			done => sub { $self->json->decode(shift) }
+		);
+	})
 }
 
 =head2 batch_get_item
@@ -444,10 +450,11 @@ sub batch_get_item {
 		my $req = $self->make_request(
 			target => 'BatchGetItem',
 			payload => \%payload,
-		);
-		$self->_request($req)->on_done(sub {
+		)->then(sub {
+			$self->_request(shift)
+		})->on_done(sub {
 			my $rslt = shift;
-			my $data = $json->decode($rslt);
+			my $data = $self->json->decode($rslt);
 			my @resp = %{$data->{Responses}};
 			# { Something => [ { Name => { S => 'text' } } ] }
 			while(my ($k, $v) = splice @resp, 0, 2) {
@@ -492,13 +499,14 @@ sub scan {
 	my $finished = 0;
 	my $count = 0;
 	try_repeat {
-		my $req = $self->make_request(
+		$self->make_request(
 			target => 'Scan',
 			payload => \%payload,
-		);
-		$self->_request($req)->on_done(sub {
+		)->then(sub {
+			$self->_request(shift)
+		})->on_done(sub {
 			my $rslt = shift;
-			my $data = $json->decode($rslt);
+			my $data = $self->json->decode($rslt);
 			for my $entry (@{$data->{Items}}) {
 				$code->({
 					map {; $_ => values %{$entry->{$_}} } keys %$entry
@@ -516,42 +524,7 @@ sub scan {
 The following methods are intended for internal use and are documented
 purely for completeness - for normal operations see L</METHODS> instead.
 
-=head2 make_request
-
-Generates an L<HTTP::Request>.
-
 =cut
-
-sub make_request {
-	my $self = shift;
-	my %args = @_;
-	my $api_version = '20120810';
-	my $host = $self->host;
-	my $target = $args{target};
-	my $js = JSON::MaybeXS->new;
-	my $req = HTTP::Request->new(
-		POST => 'http://' . $self->host . ($self->port ? (':' . $self->port) : '') . '/'
-	);
-	$req->header( host => $host );
-	my $http_date = strftime('%a, %d %b %Y %H:%M:%S %Z', localtime);
-	$req->protocol('HTTP/1.1');
-	$req->header( 'Date' => $http_date );
-	$req->header( 'x-amz-target', 'DynamoDB_'. $api_version. '.'. $target );
-	$req->header( 'content-type' => 'application/x-amz-json-1.0' );
-	my $payload = $js->encode($args{payload});
-	$req->content($payload);
-	$req->header( 'Content-Length' => length($payload));
-	my $amz = WebService::Amazon::Signature->new(
-		version    => 4,
-		algorithm  => $self->algorithm,
-		access_key => $self->access_key,
-		scope      => $self->scope,
-		secret_key => $self->secret_key,
-	);
-	$amz->from_http_request($req);
-	$req->header(Authorization => $amz->calculate_signature);
-	$req
-}
 
 sub scope {
 	my $self = shift;
@@ -559,12 +532,6 @@ sub scope {
 }
 
 sub region { shift->{region} //= 'us-west-1' }
-
-sub _request {
-	my $self = shift;
-	my $req = shift;
-	$self->implementation->request($req)
-}
 
 =head1 FUNCTIONS - Internal
 
