@@ -81,6 +81,9 @@ Only the L<Net::Async::HTTP> implementation has had any significant testing or u
 
 use WebService::Amazon::DynamoDB::20120810;
 use Module::Load;
+use POSIX qw(strftime);
+
+use Log::Any qw($log);
 
 =head1 METHODS
 
@@ -89,19 +92,81 @@ use Module::Load;
 sub new {
 	my $class = shift;
 	my %args = @_;
-	$args{implementation} //= __PACKAGE__ . '::LWP';
+	$args{implementation} //= 'WebService::Async::UserAgent::NaHTTP';
 	unless(ref $args{implementation}) {
+		$log->debugf("Loading module for HTTP implementation [%s]", $args{implementation});
 		Module::Load::load($args{implementation});
+		$log->debugf("Instantiating [%s]", $args{implementation});
 		$args{implementation} = $args{implementation}->new;
+		if(my $loop = delete $args{loop}) {
+			$loop->add($args{implementation});
+		}
 	}
-	my $version = delete $args{version} || '201208010';
+	my $version = delete $args{version} || '20120810';
 	my $pkg = __PACKAGE__ . '::' . $version;
+	$log->debugf("Look for ->new in [%s]", $pkg);
 	if(my $code = $pkg->can('new')) {
 		$class = $pkg if $class eq __PACKAGE__;
+		$args{security} ||= 'key';
+		$args{region} ||= 'us-west-1';
+		if(exists $args{host} or exists $args{port}) {
+			$args{uri} = URI->new('http://' . $args{host} . ':' . $args{port});
+		} else {
+			$args{uri} ||= 'https://dynamodb.' . $args{region} . '.amazonaws.com';
+			$args{uri} = URI->new($args{uri}) unless ref $args{uri};
+		}
 		return $code->($class, %args)
 	}
 	die "No support for version $version";
 }
+
+sub security { shift->{security} }
+
+sub uri { shift->{uri} }
+
+sub api_version { ... }
+
+=head2 make_request
+
+Generates an L<HTTP::Request>.
+
+=cut
+
+sub make_request {
+	my $self = shift;
+	my %args = @_;
+	my $target = $args{target};
+	my $js = JSON::MaybeXS->new;
+	my $req = HTTP::Request->new(
+		POST => $self->uri
+	);
+	$req->header( host => $self->uri->host );
+	my $http_date = strftime('%a, %d %b %Y %H:%M:%S %Z', localtime);
+	$req->protocol('HTTP/1.1');
+	$req->header( 'Date' => $http_date );
+	$req->header( 'x-amz-target', 'DynamoDB_'. $self->api_version. '.'. $target );
+	$req->header( 'content-type' => 'application/x-amz-json-1.0' );
+	my $payload = $js->encode($args{payload});
+	$req->content($payload);
+	$req->header( 'Content-Length' => length($payload));
+	my $amz = WebService::Amazon::Signature->new(
+		version    => 4,
+		algorithm  => $self->algorithm,
+		access_key => $self->access_key,
+		scope      => $self->scope,
+		secret_key => $self->secret_key,
+	);
+	$amz->from_http_request($req);
+	$req->header(Authorization => $amz->calculate_signature);
+	Future->done($req)
+}
+
+sub _request {
+	my $self = shift;
+	my $req = shift;
+	$self->implementation->request($req)
+}
+
 
 1;
 
