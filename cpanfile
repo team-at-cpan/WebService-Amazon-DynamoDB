@@ -5,7 +5,7 @@ requires 'JSON::MaybeXS', 0;
 requires 'Mixin::Event::Dispatch', '>= 1.006';
 requires 'WebService::Async::UserAgent', '>= 0.001';
 requires 'WebService::Amazon::Signature', '>= 0.002';
-requires 'WebService::Amazon::IAM', '>= 0.001';
+requires 'WebService::Amazon::IAM', '>= 0.002';
 requires 'Module::Load', 0;
 requires 'HTTP::Request', 0;
 requires 'Time::Moment', 0;
