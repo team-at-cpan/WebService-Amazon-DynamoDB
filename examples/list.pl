@@ -27,3 +27,9 @@ $ddb->each_table(sub {
 	my $tbl = shift;
 	say $tbl;
 }, limit => 5)->get;
+
+say "Run that again:";
+$ddb->each_table(sub {
+	my $tbl = shift;
+	say $tbl;
+}, limit => 5)->get;
