@@ -11,6 +11,7 @@ WebService::Amazon::DynamoDB - support for the AWS DynamoDB API
 
 =head1 SYNOPSIS
 
+ # Using access key
  my $ddb = WebService::Amazon::DynamoDB->new(
   implementation => 'WebService::Amazon::DynamoDB::LWP',
   version        => '20120810',
@@ -34,6 +35,18 @@ WebService::Amazon::DynamoDB - support for the AWS DynamoDB API
    }
   },
  )->get;
+
+ # Using the IAM role from the current EC2 instance
+ my $ddb = WebService::Amazon::DynamoDB->new(
+  security       => 'iam',
+ );
+ ...
+
+ # Using a specific IAM role
+ my $ddb = WebService::Amazon::DynamoDB->new(
+  security       => 'iam',
+  iam_role       => 'role_name',
+ );
 
 =head1 BEFORE YOU START
 
