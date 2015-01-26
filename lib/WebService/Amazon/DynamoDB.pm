@@ -13,12 +13,10 @@ WebService::Amazon::DynamoDB - support for the AWS DynamoDB API
 
  # Using access key
  my $ddb = WebService::Amazon::DynamoDB->new(
-  implementation => 'WebService::Amazon::DynamoDB::LWP',
   version        => '20120810',
   access_key     => 'access_key',
   secret_key     => 'secret_key',
-  host           => 'localhost',
-  port           => 8000,
+  uri            => 'http://localhost:8000',
  );
  $ddb->batch_get_item(
   sub {
@@ -63,13 +61,13 @@ Current implementations for issuing the HTTP requests:
 
 =over 4
 
-=item * L<WebService::UA::NaHTTP> - use L<Net::Async::HTTP>
+=item * L<WebService::Async::UserAgent::NaHTTP> - use L<Net::Async::HTTP>
 for applications based on L<IO::Async> (this gives nonblocking behaviour)
 
-=item * L<WebService::UA::LWP> - use L<LWP::UserAgent> (will
+=item * L<WebService::Async::UserAgent::LWP> - use L<LWP::UserAgent> (will
 block, timeouts are unlikely to work)
 
-=item * L<WebService::UA::MojoUA> - use L<Mojo::UserAgent>,
+=item * L<WebService::Async::UserAgent::MojoUA> - use L<Mojo::UserAgent>,
 should be suitable for integration into a L<Mojolicious> application (could
 be adapted for nonblocking, although the current version does not do this).
 
