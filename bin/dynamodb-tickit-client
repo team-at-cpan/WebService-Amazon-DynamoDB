@@ -216,8 +216,11 @@ loop->later(sub {
 					+[
 						$name => [
 							Tables => $tables,
-							'Keys',
-							'IAM Roles'
+							'Clients',
+							'Auth' => [
+								'Keys',
+								'IAM Roles'
+							],
 						]
 					]
 				}
