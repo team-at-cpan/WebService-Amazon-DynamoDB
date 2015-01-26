@@ -23,8 +23,6 @@ use HTTP::Request;
 
 use WebService::Amazon::Signature;
 
-my $json = JSON::MaybeXS->new;
-
 =head2 new
 
 Instantiates the API object.
@@ -36,19 +34,17 @@ Expects the following named parameters:
 =item * implementation - the object which provides a Future-returning C<request> method,
 see L<WebService::Amazon::DynamoDB::NaHTTP> for example.
 
-=item * host - the host (IP or hostname) to communicate with
+=item * uri - the base URI for constructing requests
 
-=item * port - the port to use for HTTP(S) requests
+=item * security - 'iam' or 'key'
 
-=item * ssl - true for HTTPS, false for HTTP
+=item * access_key - the access key for signing requests (only for security=key)
+
+=item * secret_key - the secret key for signing requests (only for security=key)
+
+=item * role - the role to use for requests (only for security=iam, usually autodetected from EC2 instance metadata)
 
 =item * algorithm - which signing algorithm to use, default AWS4-HMAC-SHA256
-
-=item * scope - the scope for requests, typically C<region/host/aws4_request>
-
-=item * access_key - the access key for signing requests
-
-=item * secret_key - the secret key for signing requests
 
 =back
 
@@ -65,6 +61,8 @@ sub port { shift->{port} }
 sub algorithm { 'AWS4-HMAC-SHA256' }
 sub access_key { shift->{access_key} }
 sub secret_key { shift->{secret_key} }
+sub api_version { '20120810' }
+sub json { shift->{json} //= JSON::MaybeXS->new }
 
 =head2 security_token
 
