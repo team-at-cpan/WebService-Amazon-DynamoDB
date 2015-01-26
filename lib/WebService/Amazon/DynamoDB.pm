@@ -79,6 +79,8 @@ Only the L<Net::Async::HTTP> implementation has had any significant testing or u
 
 =cut
 
+use WebService::Amazon::IAM::Client;
+
 use WebService::Amazon::DynamoDB::20120810;
 use Module::Load;
 use POSIX qw(strftime);
