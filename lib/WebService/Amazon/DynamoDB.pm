@@ -110,6 +110,7 @@ sub new {
 		$class = $pkg if $class eq __PACKAGE__;
 		$args{security} ||= 'key';
 		$args{region} ||= 'us-west-1';
+		$args{iam_role} = Future->done($args{iam_role}) if exists $args{iam_role} && !ref $args{iam_role};
 		if(exists $args{host} or exists $args{port}) {
 			$args{uri} = URI->new('http://' . $args{host} . ':' . $args{port});
 		} else {
