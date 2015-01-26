@@ -3,6 +3,8 @@ package WebService::Amazon::DynamoDB::20120810;
 use strict;
 use warnings;
 
+use parent qw(WebService::Amazon::DynamoDB);
+
 =head1 NAME
 
 WebService::Amazon::DynamoDB::20120810 - interact with DynamoDB using API version 20120810
