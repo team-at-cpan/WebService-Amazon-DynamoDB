@@ -99,10 +99,9 @@ sub new {
 		$log->debugf("Loading module for HTTP implementation [%s]", $args{implementation});
 		Module::Load::load($args{implementation});
 		$log->debugf("Instantiating [%s]", $args{implementation});
-		$args{implementation} = $args{implementation}->new;
-		if(my $loop = delete $args{loop}) {
-			$loop->add($args{implementation});
-		}
+		$args{implementation} = $args{implementation}->new(
+			(exists $args{loop} ? (loop => delete $args{loop}) : ())
+		);
 	}
 	my $version = delete $args{version} || '20120810';
 	my $pkg = __PACKAGE__ . '::' . $version;
