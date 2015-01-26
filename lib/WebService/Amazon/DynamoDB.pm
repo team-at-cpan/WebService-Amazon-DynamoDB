@@ -237,7 +237,6 @@ sub _request {
 sub iam {
 	$_[0]->{iam} //= WebService::Amazon::IAM::Client->new(
 		ua => $_[0]->implementation,
-		base_uri => 'http://localhost:8088',
 	)
 }
 
