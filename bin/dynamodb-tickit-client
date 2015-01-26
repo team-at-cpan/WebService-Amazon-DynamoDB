@@ -12,6 +12,22 @@ use POSIX qw(strftime);
 
 use Log::Any::Adapter 'Stderr';
 
+=head2 subscribe_event
+
+Subscribes to an event.
+
+=over 4
+
+=item * $code - callback to run on event trigger
+
+=item * $obj - L<Tangence::ObjectProxy> to watch
+
+=item * $ev - which event
+
+=back
+
+=cut
+
 sub subscribe_event(&@) {
 	my ($code, $obj, $ev) = @_;
 	my $f = loop->new_future;
