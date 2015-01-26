@@ -154,7 +154,8 @@ sub make_request {
 	$req->header( 'Content-Length' => length($payload));
 	$self->credentials->then(sub {
 		my ($creds) = @_;
-		$log->debugf("Using [%s] for credentials", $creds);
+		# Don't show these by default
+		# $log->debugf("Using [%s] for credentials", $creds);
 		my $token = delete $creds->{token};
 		my $amz = WebService::Amazon::Signature->new(
 			version    => 4,
@@ -228,7 +229,8 @@ sub retrieve_iam_credentials {
 sub _request {
 	my $self = shift;
 	my $req = shift;
-	$log->debugf("Issuing request [%s]", $req->as_string("\n"));
+	# Don't show requests by default
+	# $log->debugf("Issuing request [%s]", $req->as_string("\n"));
 	$self->implementation->request($req)
 }
 
