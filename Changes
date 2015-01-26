@@ -1,6 +1,13 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+	No new features.
+
+	Bugs fixed:
+	* No longer overrides the default IAM endpoint
+
+	Dependencies:
+	* WebService::Amazon::IAM added
 
 0.002     2015-01-26 16:36:17+00:00 Europe/London
 	Note that you should be using Amazon::DynamoDB unless you *really* have
