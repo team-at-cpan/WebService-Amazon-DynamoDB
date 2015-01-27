@@ -1,6 +1,14 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+	No new features.
+
+	Bugs fixed:
+	* All numeric values are now sent as strings, to conform with AWS expectations.
+	e.g.
+	 { "N": 123 }
+	should be
+	 { "N": "123" }
 
 0.003     2015-01-26 17:10:37+00:00 Europe/London
 	No new features.

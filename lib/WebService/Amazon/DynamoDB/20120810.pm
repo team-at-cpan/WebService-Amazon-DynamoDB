@@ -309,7 +309,7 @@ sub put_item {
 	);
 	foreach my $k (keys %{$args{fields}}) {
 		my $v = $args{fields}{$k};	
-		$payload{Item}{$k} = { type_for_value($v) => "$v" };
+		$payload{Item}{$k} = { type_and_value($v) };
 	}
 
 	$self->make_request(
@@ -351,13 +351,13 @@ sub update_item {
 	);
 	foreach my $k (keys %{$args{item}}) {
 		my $v = $args{item}{$k};	
-		$payload{Key}{$k} = { type_for_value($v) => "$v" };
+		$payload{Key}{$k} = { type_and_value($v) };
 	}
 	foreach my $k (keys %{$args{fields}}) {
 		my $v = $args{fields}{$k};	
 		$payload{AttributeUpdates}{$k} = {
 			Action => $args{action} || 'PUT',
-			Value => { type_for_value($v) => "$v" }
+			Value => { type_and_value($v) }
 		};
 	}
 
@@ -397,7 +397,7 @@ sub delete_item {
 	);
 	foreach my $k (keys %{$args{item}}) {
 		my $v = $args{item}{$k};	
-		$payload{Key}{$k} = { type_for_value($v) => "$v" };
+		$payload{Key}{$k} = { type_and_value($v) };
 	}
 
 	my $req = $self->make_request(
@@ -439,7 +439,7 @@ sub batch_get_item {
 		while(my ($k, $v) = splice @keys, 0, 2) {
 			push @{$payload{RequestItems}{$tbl}{Keys}}, {
 				$k => {
-					type_for_value($v) => "$v"
+					type_and_value($v)
 				}
 			};
 		}
@@ -490,7 +490,7 @@ sub scan {
 	for my $f (@{$args{filter}}) {
 		$filter{$f->{field}} = {
 			AttributeValueList => [ {
-				type_for_value($f->{value}) => '' . $f->{value},
+				type_and_value($f->{value})
 			} ],
 			ComparisonOperator => $f->{compare} || 'EQ',
 		}
@@ -568,6 +568,21 @@ sub type_for_value {
 		return 'N' if $flags & (B::SVp_IOK | B::SVp_NOK);
 		return 'S';
 	}
+}
+
+=head2 type_and_value
+
+Returns a pair of (type, value), using L</type_for_value>.
+
+=cut
+
+sub type_and_value {
+	my $v = shift;
+	my $type = type_for_value($v);
+	return $type, "$v" unless my $ref = ref $v;
+	return $type, [ map "$_", @$v ] if $ref eq 'ARRAY';
+	return $type, { map {; $_ => ''.$v->{$_} } keys %$v } if $ref eq 'HASH';
+	return $type, "$v";
 }
 
 sub validate_table_name {
