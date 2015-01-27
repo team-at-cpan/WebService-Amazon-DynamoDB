@@ -309,7 +309,7 @@ sub put_item {
 	);
 	foreach my $k (keys %{$args{fields}}) {
 		my $v = $args{fields}{$k};	
-		$payload{Item}{$k} = { type_for_value($v) => $v };
+		$payload{Item}{$k} = { type_for_value($v) => "$v" };
 	}
 
 	$self->make_request(
@@ -351,13 +351,13 @@ sub update_item {
 	);
 	foreach my $k (keys %{$args{item}}) {
 		my $v = $args{item}{$k};	
-		$payload{Key}{$k} = { type_for_value($v) => $v };
+		$payload{Key}{$k} = { type_for_value($v) => "$v" };
 	}
 	foreach my $k (keys %{$args{fields}}) {
 		my $v = $args{fields}{$k};	
 		$payload{AttributeUpdates}{$k} = {
 			Action => $args{action} || 'PUT',
-			Value => { type_for_value($v) => $v }
+			Value => { type_for_value($v) => "$v" }
 		};
 	}
 
@@ -397,7 +397,7 @@ sub delete_item {
 	);
 	foreach my $k (keys %{$args{item}}) {
 		my $v = $args{item}{$k};	
-		$payload{Key}{$k} = { type_for_value($v) => $v };
+		$payload{Key}{$k} = { type_for_value($v) => "$v" };
 	}
 
 	my $req = $self->make_request(
@@ -439,7 +439,7 @@ sub batch_get_item {
 		while(my ($k, $v) = splice @keys, 0, 2) {
 			push @{$payload{RequestItems}{$tbl}{Keys}}, {
 				$k => {
-					type_for_value($v) => $v
+					type_for_value($v) => "$v"
 				}
 			};
 		}
@@ -490,7 +490,7 @@ sub scan {
 	for my $f (@{$args{filter}}) {
 		$filter{$f->{field}} = {
 			AttributeValueList => [ {
-				type_for_value($f->{value}) => $f->{value},
+				type_for_value($f->{value}) => '' . $f->{value},
 			} ],
 			ComparisonOperator => $f->{compare} || 'EQ',
 		}
