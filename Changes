@@ -10,6 +10,9 @@ Revision history for {{$dist->name}}
 	should be
 	 { "N": "123" }
 
+	Dependencies:
+	* WebService::Async::UserAgent 0.002, mostly for dependency fixes
+
 0.003     2015-01-26 17:10:37+00:00 Europe/London
 	No new features.
 
