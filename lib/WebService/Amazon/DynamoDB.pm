@@ -38,7 +38,6 @@ WebService::Amazon::DynamoDB - support for the AWS DynamoDB API
  my $ddb = WebService::Amazon::DynamoDB->new(
   security       => 'iam',
  );
- ...
 
  # Using a specific IAM role
  my $ddb = WebService::Amazon::DynamoDB->new(
